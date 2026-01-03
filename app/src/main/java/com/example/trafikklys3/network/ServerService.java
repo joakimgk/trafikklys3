@@ -13,22 +13,25 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 public class ServerService {
 
     private static final String TAG = "ServerService";
     private static final int TCP_PORT = 10000;
-    private static final int UDP_PORT = 4210;
+    private static final int UDP_SEND_PORT = 4210;
+    private static final int UDP_READ_PORT = 4211;
 
     private Thread tcpThread;
     private Thread udpThread;
+    private Thread udpRxThread;
+    private DatagramSocket udpRxSocket;
+
     private volatile boolean running = false;
 
     public void start(Context context) {
         running = true;
-        startTcpServer();
+        //startTcpServer();
         startUdpBroadcast(context);
     }
 
@@ -52,6 +55,98 @@ public class ServerService {
 
         tcpThread.start();
     }
+
+    private void startUdpReceiver() {
+
+        udpRxThread = new Thread(() -> {
+            try {
+                udpRxSocket = new DatagramSocket(UDP_READ_PORT);
+                udpRxSocket.setReuseAddress(true);
+
+                Log.d(TAG, "UDP receiver listening on " + UDP_READ_PORT);
+
+                byte[] buffer = new byte[512];
+
+                while (running) {
+                    DatagramPacket packet =
+                            new DatagramPacket(buffer, buffer.length);
+
+                    udpRxSocket.receive(packet);
+
+                    InetAddress fromAddr = packet.getAddress();
+                    int length = packet.getLength();
+
+                    handleUdpPacket(fromAddr, buffer, length);
+                }
+
+            } catch (Exception e) {
+                if (running) {
+                    Log.e(TAG, "UDP receiver error", e);
+                }
+            }
+        }, "UDP-Rx");
+
+        udpRxThread.start();
+    }
+
+
+    private void handleUdpPacket(
+            InetAddress from,
+            byte[] data,
+            int length) {
+
+        if (length < 2) return;
+
+        int cmd = data[0] & 0xFF;
+        int len = data[1] & 0xFF;
+
+        if (len + 2 > length) {
+            Log.w(TAG, "Malformed UDP packet");
+            return;
+        }
+
+        byte[] payload = new byte[len];
+        System.arraycopy(data, 2, payload, 0, len);
+
+        Log.d(TAG,
+                "UDP RX cmd=" + cmd +
+                        " len=" + len +
+                        " from=" + from.getHostAddress());
+
+        handlePacket(cmd, payload, from);
+    }
+
+    private void handlePacket(
+            int cmd,
+            byte[] payload,
+            InetAddress from) {
+
+        switch (cmd) {
+
+            case 0x01: {  // CMD_ANNOUNCE
+                if (payload.length < 4) return;
+
+                int espId =
+                        ((payload[0] & 0xFF) << 24) |
+                                ((payload[1] & 0xFF) << 16) |
+                                ((payload[2] & 0xFF) << 8) |
+                                (payload[3] & 0xFF);
+
+                Log.d(TAG,
+                        "ESP announce id=" + espId +
+                                " ip=" + from.getHostAddress());
+
+                // TODO:
+                // - add/update ESP in registry
+                // - mark lastSeen
+                // - notify ShowController / UI
+
+                break;
+            }
+        }
+    }
+
+
 
     private void startUdpBroadcast(Context context) {
 
@@ -90,7 +185,7 @@ public class ServerService {
                                     payload,
                                     payload.length,
                                     broadcastAddr,
-                                    UDP_PORT
+                                    UDP_SEND_PORT
                             );
 
                     socket.send(packet);
