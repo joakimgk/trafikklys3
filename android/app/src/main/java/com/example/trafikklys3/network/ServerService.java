@@ -1,5 +1,8 @@
 package com.example.trafikklys3.network;
 
+import static com.example.trafikklys3.network.EspProtocol.CMD_DISCOVER;
+import static com.example.trafikklys3.network.EspProtocol.buildCommand;
+
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
@@ -175,8 +178,12 @@ public class ServerService {
                 socket.bind(new InetSocketAddress(0));
                 socket.setBroadcast(true);
 
-                byte[] payload =
-                        ("TL_SERVER:10000").getBytes(StandardCharsets.UTF_8);
+                // TODO: Support empty messages (len = 0)
+                byte[] dummyData = new byte[] {
+                        0x01, 0x02, 0x03
+                };
+
+                byte[] payload = buildCommand(CMD_DISCOVER, dummyData);
 
                 while (running) {
 
