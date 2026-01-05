@@ -1,11 +1,7 @@
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager
 #include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
 #include <WiFiUdp.h>
 #include <Ticker.h>
-
-
-#define PORT 10000  // TCP
 
 #define UDP_PORT 4210
 #define UDP_HOST "0.0.0.0"
@@ -16,27 +12,23 @@
 #define PING_TIME 2000
 #define RESET_TIME 500
 
-struct RxBuffer {
-  uint8_t data[MAX_LENGTH];
-  size_t len = 0;
-};
+#define CMD_ANNOUNCE 0x77
 
-RxBuffer rx;
+uint8_t udpRxBuf[MAX_LENGTH];
+size_t udpRxLen = 0;
+
 char sendBuffer[65];
 const short int GREEN = 3;  // remap RX
 const short int YELLOW = 0;
 const short int RED = 2;
 
-
 IPAddress remoteAddress;
-bool connectionReady = false;
-
+bool remoteKnown = false;
+bool ready = false;
 int state = LOW;
 
 const uint32 clientID = system_get_chip_id();
 char clientIDstring[9];
-
-bool running = true;
 
 volatile unsigned int tempo = 100;
 char program[MAX_LENGTH];
@@ -45,11 +37,8 @@ volatile int length;
 int rec_length;
 volatile int step = 0;
 
-bool DO_MASTER_SYNC = false;
 bool offline = false;
-bool master = false;
 
-static AsyncClient* client = NULL;
 WiFiUDP UDP;
 Ticker timer;
 
@@ -68,64 +57,6 @@ void ICACHE_RAM_ATTR onTime() {
   }
   
   timeSincePing++;
-/*
-  if (timeSincePing % 1000 == 0) {
-    Serial.println("\tMASTER timeSincePing = " + (String)timeSincePing);
-  }
-  if (timeSinceReset % 1000 == 0) {
-    Serial.println("\tMASTER timeSinceReset = " + (String)timeSinceReset);
-  }
-  */
-}
-
-/* event callbacks */
-static void handleData(void* arg, AsyncClient* client, void *data, size_t len) {
-  if (rx.len + len > MAX_LENGTH) {
-    // overflow → drop buffer
-    Serial.println("handleData overflow");
-    rx.len = 0;
-    return;
-  }
-
-  memcpy(rx.data + rx.len, data, len);
-  rx.len += len;
-
-  processRxBuffer();
-}
-
-void processRxBuffer() {
-  Serial.println("processRxBuffer");
-  while (true) {
-    // Need at least CMD + LEN
-    if (rx.len < 2) return;
-
-    uint8_t cmd = rx.data[0];
-    uint8_t payloadLen = rx.data[1];
-    size_t packetLen = payloadLen + 2;
-
-    // Wait until full packet is available
-    if (rx.len < packetLen) return;
-
-    // Process one packet
-    handlePacket(cmd, rx.data + 2, payloadLen);
-
-    // Remove packet from buffer
-    memmove(rx.data, rx.data + packetLen, rx.len - packetLen);
-    rx.len -= packetLen;
-  }
-}
-
-
-void onConnect(void* arg, AsyncClient* client) {
-	Serial.print("client has been connected to ");
-  Serial.print(remoteAddress);
-  Serial.println(" on port " + (String)PORT);
-  connectionReady = true;
-
-  // send clientID, to complete setup
-  sprintf(sendBuffer, "clientID=%lu", (unsigned long)clientID);
-  Serial.println(sendBuffer);
-  send(sendBuffer);
 }
 
 
@@ -150,10 +81,10 @@ void setup() {
   timer1_attachInterrupt(onTime); // Add ISR Function
   timer1_enable(TIM_DIV16, TIM_EDGE, TIM_LOOP);  //NB!! Crystal is 26MHz!! Not 80!
   // Arm the Timer for our 0.2s Interval
-  timer1_write(TIMER_DELAY); // 25000000 / 5 ticks per us from TIM_DIV16 == 200,000 us interval 
+  timer1_write(TIMER_DELAY); // 25000000 / 5 ticks per  us from TIM_DIV16 == 200,000 us interval 
 
   sprintf(clientIDstring, "%08x", clientID);
-  Serial.println("\nTrafikklys 4.1\n");
+  Serial.println("\nTrafikklys 4.2\n");
   Serial.print("ClientID: ");
   Serial.println(clientID);
 
@@ -173,10 +104,6 @@ void setup() {
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP());
 
-  client = new AsyncClient;
-  client->onData(&handleData, client);
-  client->onConnect(&onConnect, client);
-
   length = 2;
   tempo = 100;
   program[0] = 0b00000010;
@@ -186,42 +113,6 @@ void setup() {
   UDP.begin(UDP_PORT);
   Serial.print("Listening on UDP port ");
   Serial.println(UDP_PORT);
-
-  // wait for an UDP packet, to get the IP address of the server
-  while (true) {
-    if (readUDP()) {
-
-      Serial.print("remoteAddress: ");
-      Serial.println(remoteAddress);
-      if (client->connect(remoteAddress, PORT)) {
-        Serial.println("CONNECTED");
-        break;
-      } else {
-        Serial.println("Connection failed");
-      }
-    }
-    delay(700);
-    Serial.print(".");
-  }
-
-  length = 1;
-  program[0] = 0b00000100;
-
-
-  length = 4;
-  program[0] = 0b00000001;
-  program[1] = 0b00000010;
-  program[2] = 0b00000100;
-  program[3] = 0b00000010;
-}
-
-void send(char data[]) {
-	if (client->space() > 32 && client->canSend()) {
-		client->add(data, strlen(data));
-		client->send();
-	} else {
-    Serial.println("FAILED to send");
-  }
 }
 
 char packet[255];
@@ -242,25 +133,67 @@ void configModeExitCallback () {
   ESP.restart();
 }
 
-bool readUDP() {
+void pollUdp() {
   int packetSize = UDP.parsePacket();
-  if (packetSize) {
-    Serial.print("Received packet! Size: ");
-    Serial.println(packetSize); 
-    int len = UDP.read(packet, 255);
-    if (len > 0)
-    {
-      packet[len] = '\0';
-    }
-    Serial.print("Packet received: ");
-    Serial.println(packet);
+  if (packetSize <= 0) return;
 
-    remoteAddress = UDP.remoteIP();
-    //handlePayload(packet);
-
-    return true;
+  if (packetSize > MAX_LENGTH) {
+    // Oversized packet → discard
+    while (UDP.available()) UDP.read();
+    return;
   }
-  return false;
+
+  udpRxLen = UDP.read(udpRxBuf, packetSize);
+  if (!remoteKnown) {
+    remoteAddress = UDP.remoteIP();
+    remoteKnown = true;
+
+    uint8_t packet[6];
+    packet[0] = CMD_ANNOUNCE;
+    packet[1] = 4;
+    pack_u32(clientID, packet + 2);
+    sendUdp(packet, sizeof(packet));
+  }
+
+  if (udpRxLen != packetSize) {
+    // Should not happen, but be safe
+    udpRxLen = 0;
+    return;
+  }
+
+  processUdpPacket(udpRxBuf, udpRxLen);
+}
+
+inline void pack_u32(uint32_t value, uint8_t *out) {
+  out[0] = (value >> 24) & 0xFF;
+  out[1] = (value >> 16) & 0xFF;
+  out[2] = (value >> 8)  & 0xFF;
+  out[3] = value & 0xFF;
+}
+
+inline void pack_u16(uint16_t value, uint8_t *out) {
+  out[0] = (value >> 8) & 0xFF;
+  out[1] = value & 0xFF;
+}
+
+inline void pack_u8(uint8_t value, uint8_t *out) {
+  out[0] = value;
+}
+
+
+bool sendUdp(const uint8_t *data, size_t len) {
+  if (!remoteKnown || len == 0) return false;
+
+  if (!UDP.beginPacket(remoteAddress, UDP_PORT)) {
+    return false;
+  }
+
+  UDP.write(data, len);
+  return UDP.endPacket();
+}
+bool sendUdp(const char *text) {
+  if (text == nullptr) return false;
+  return sendUdp((const uint8_t *)text, strlen(text));
 }
 
 
@@ -279,7 +212,31 @@ void loop() {
     blinkFlag = false;
   }
 
+  pollUdp();
+
   delay(10);
+}
+
+
+void processUdpPacket(uint8_t *buf, size_t len) {
+  // Must have at least CMD + LEN
+  if (len < 2) {
+    Serial.println(F("UDP: packet too short"));
+    return;
+  }
+
+  uint8_t cmd = buf[0];
+  uint8_t payloadLen = buf[1];
+
+  if (payloadLen + 2 != len) {
+    Serial.print(F("UDP: length mismatch, expected "));
+    Serial.print(payloadLen + 2);
+    Serial.print(F(" got "));
+    Serial.println(len);
+    return;
+  }
+
+  handlePacket(cmd, buf + 2, payloadLen);
 }
 
 void printByte(unsigned char b) {
@@ -296,10 +253,6 @@ ICACHE_RAM_ATTR int getBit(unsigned char b, int i) {
 }
 
 ICACHE_RAM_ATTR void blink() {
-  if (!running) {
-    return;
-  }
-  
   if (++step >= length) {
     step = 0;
   }
@@ -336,16 +289,13 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
 
   switch (cmd) {
 
-    /*
-    case 0x00: // STOP / PAUSE
-      running = false;
+    case 0x00: // READY
+      ready = true;
+      length = 1;
+      step = 0;
+      program[0] = 0b00000100;
       break;
 
-    case 0x0A:  // START / RESUME
-      running = true;
-      break;
-      */
-      
     case 0x01:  // TEMPO
       test = payload[2];
 
@@ -361,7 +311,6 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       
     case 0x02:  // RESET (restart nåværende program)
       step = 0;
-      running = true;
       break;
   
     case 0x03:  // MOTTA PROGRAM  (dump payload inn i *rec_program)
@@ -379,7 +328,6 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       }
       length = rec_length;
       step = 0;  // og RESET!
-      running = true;
       break;
 
       
