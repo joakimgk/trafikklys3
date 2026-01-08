@@ -1,5 +1,7 @@
 package com.example.trafikklys3.controller;
 
+import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
+import static com.example.trafikklys3.network.EspProtocol.CMD_RESET;
 import static com.example.trafikklys3.network.EspProtocol.CMD_TEMPO;
 
 import android.os.Handler;
@@ -37,7 +39,16 @@ public class ShowController implements ClientListener {
     public void setTempo(int tempo) {
         Log.d("ShowController", "setTempo: " + tempo);
         byte[] payload = new byte[] { (byte) (tempo & 0xFF) };
-        network.sendBroadcast(EspProtocol.buildCommand(CMD_TEMPO, payload));
+        network.sendToAll(EspProtocol.buildCommand(CMD_TEMPO, payload));
+        //network.sendBroadcast(EspProtocol.buildCommand(CMD_TEMPO, payload));
+    }
+
+    public void changeProgram(byte[] program) {
+        network.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, program));
+    }
+
+    public void resetProgram() {
+        network.sendToAll(EspProtocol.buildCommand(CMD_RESET));
     }
 
     @Override

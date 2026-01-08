@@ -21,7 +21,9 @@ public class DiscoveryTask implements Runnable {
     @Override
     public void run() {
         byte[] pkt = EspProtocol.buildCommand(EspProtocol.CMD_DISCOVER);
-        server.sendBroadcast(pkt);
+        server.beacon(pkt);
     }
+
+    // TODO: Make a separate SyncTask (which uses sendToAll, instead of broadcast)
 }
 

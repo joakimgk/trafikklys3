@@ -29,7 +29,7 @@ public class ServerService implements NetworkSender {
     private static final int UDP_PORT = 4210;
 
     private static final int REPEAT_BROADCAST = 3;
-    private static final int REPEAT_UNICAST = 100;
+    private static final int REPEAT_UNICAST = 1;
 
     private static final int INTERVAL_BROADCAST = 2;
     private static final int INTERVAL_UNICAST = 60;
@@ -171,9 +171,18 @@ public class ServerService implements NetworkSender {
 
     @Override
     public void sendBroadcast(byte[] packet) {
+        if (registry.noClients()) return;
         sendRepeated(packet, this.broadcastAddr, REPEAT_BROADCAST, INTERVAL_BROADCAST);
         /*sendExecutor.execute(() ->
             send(packet, this.broadcastAddr)
+        );*/
+    }
+
+    @Override
+    public void beacon(byte[] packet) {
+        sendRepeated(packet, this.broadcastAddr, REPEAT_BROADCAST, INTERVAL_BROADCAST);
+        /*sendExecutor.execute(() ->
+                send(packet, this.broadcastAddr) // sends ONCE
         );*/
     }
 

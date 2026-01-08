@@ -44,5 +44,7 @@ public class ClientRegistry {
         return clients.values();
     }
 
+    public boolean noClients() { return clients.values().isEmpty(); }
+
 
 }

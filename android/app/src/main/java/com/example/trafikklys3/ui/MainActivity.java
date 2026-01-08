@@ -1,6 +1,9 @@
 package com.example.trafikklys3.ui;
 
+import static com.example.trafikklys3.model.Programs.PROGRAMS;
+
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -22,10 +25,12 @@ public class MainActivity extends AppCompatActivity {
 
     private int tempo = 60;
 
+    private int program = 0;
+
     private TrafficLightContainer mContainer;
     private TextView tempoIndicator;
-    private Button tempoPlusButton;
-    private Button tempoMinusButton;
+    private Button tempoPlusButton, tempoMinusButton;
+    private Button changeProgram, resetProgram;
     private SeekBar tempoSlider;
 
     private ShowController controller;
@@ -40,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
         controller = new ShowController(serverService, mContainer);
         serverService.getRegistry().setListener(controller);
 
+        changeProgram = findViewById(R.id.changeProgram);
+        resetProgram = findViewById(R.id.resetProgram);
         tempoIndicator = findViewById(R.id.tempoIndicator);
         tempoPlusButton = findViewById(R.id.tempoPlusButton);
         tempoMinusButton = findViewById(R.id.tempoMinusButton);
@@ -53,6 +60,25 @@ public class MainActivity extends AppCompatActivity {
 
         tempoMinusButton.setOnClickListener(v -> {
             checkTempo(tempo - 1);
+        });
+
+        changeProgram.setOnClickListener(v -> {
+            program++;
+            if (program == PROGRAMS.length) program = 0;
+            int len = PROGRAMS[program].length;
+            Log.v("JOAKIM", "Send program #" + program + " (" + len + " bytes)");
+            //if (Utility.clients.size() < 1) {
+            //    Log.e("MainActivity", "No clients");
+            //} else {
+            controller.changeProgram(PROGRAMS[program]);
+            // TODO: Send different parts of program to different clients...
+            //clients.get(0).transmit(payload);
+            //}
+        });
+
+        resetProgram.setOnClickListener(v -> {
+            Log.v("JOAKIM", "Send reset");
+            controller.resetProgram();
         });
 
         // perform seek bar change listener event used for getting the progress value
