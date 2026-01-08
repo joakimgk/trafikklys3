@@ -11,6 +11,8 @@ import com.example.trafikklys3.R;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.network.ServerService;
 
+import java.net.SocketException;
+
 public class MainActivity extends AppCompatActivity {
 
     private ServerService serverService;
@@ -20,6 +22,7 @@ public class MainActivity extends AppCompatActivity {
 
     private int tempo = 60;
 
+    private TrafficLightContainer mContainer;
     private TextView tempoIndicator;
     private Button tempoPlusButton;
     private Button tempoMinusButton;
@@ -32,7 +35,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        controller = new ShowController(this);
+        mContainer = findViewById(R.id.traffic_light_container);
+        controller = new ShowController(mContainer);
+
 
         tempoIndicator = findViewById(R.id.tempoIndicator);
         tempoPlusButton = findViewById(R.id.tempoPlusButton);
@@ -42,11 +47,11 @@ public class MainActivity extends AppCompatActivity {
         updateTempoDisplay();
 
         tempoPlusButton.setOnClickListener(v -> {
-            setTempo(tempo + 1);
+            checkTempo(tempo + 1);
         });
 
         tempoMinusButton.setOnClickListener(v -> {
-            setTempo(tempo - 1);
+            checkTempo(tempo - 1);
         });
 
         // perform seek bar change listener event used for getting the progress value
@@ -58,15 +63,16 @@ public class MainActivity extends AppCompatActivity {
                 tempo = Math.max(1, progress);
                 tempoIndicator.setText("tempo: " + tempo);
 
-                controller.setTempo(tempo);
+                checkTempo(tempo);
             }
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
+
     }
 
-    private void setTempo(int newTempo) {
+    private void checkTempo(int newTempo) {
         if (newTempo < TEMPO_MIN) newTempo = TEMPO_MIN;
         if (newTempo > TEMPO_MAX) newTempo = TEMPO_MAX;
 
@@ -85,8 +91,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        serverService = new ServerService();
-        serverService.start(this);
+        serverService = new ServerService(this, controller);
+        try {
+            serverService.start();
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
+        }
         controller.start();
     }
 

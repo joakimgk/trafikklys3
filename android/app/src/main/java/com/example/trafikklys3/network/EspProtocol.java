@@ -1,7 +1,19 @@
 package com.example.trafikklys3.network;
 
+import android.util.Log;
+
+import com.example.trafikklys3.model.ClientRegistry;
+
+import java.net.InetAddress;
+
 public final class EspProtocol {
-    private EspProtocol() {} // prevent instantiation
+    private static final String TAG = "EspProtocol";
+
+    public static ClientRegistry registry;
+
+    public EspProtocol(ClientRegistry registry) {
+        this.registry = registry;
+    }
 
     // ---- Command codes (App -> ESP) ----
     public static final byte CMD_DISCOVER = 0x77;
@@ -33,6 +45,53 @@ public final class EspProtocol {
     }
 
 
-    // ---- Optional: ESP -> App message types ----
-    public static final String MSG_CLIENT_ID = "clientID";
+
+    public void handleUdpPacket(
+            InetAddress from,
+            byte[] data,
+            int length) {
+
+        if (length < 2) return;
+
+        int cmd = data[0] & 0xFF;
+        int len = data[1] & 0xFF;
+
+        if (len + 2 > length) {
+            Log.w(TAG, "Malformed UDP packet");
+            return;
+        }
+
+        byte[] payload = new byte[len];
+        System.arraycopy(data, 2, payload, 0, len);
+
+        handlePacket(cmd, payload, from);
+    }
+
+
+    private void handlePacket(
+            int cmd,
+            byte[] payload,
+            InetAddress from) {
+
+        switch (cmd) {
+
+            case CMD_DISCOVER: {  // CMD_ANNOUNCE
+                if (payload.length < 4) return;
+
+                int espId =
+                        ((payload[0] & 0xFF) << 24) |
+                                ((payload[1] & 0xFF) << 16) |
+                                ((payload[2] & 0xFF) << 8) |
+                                (payload[3] & 0xFF);
+
+                Log.d(TAG,
+                        "ESP announce id=" + espId +
+                                " ip=" + from.getHostAddress());
+
+                registry.onAnnounce(espId, from);
+
+                break;
+            }
+        }
+    }
 }
