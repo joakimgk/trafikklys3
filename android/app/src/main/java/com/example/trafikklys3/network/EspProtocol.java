@@ -19,6 +19,7 @@ public final class EspProtocol {
     public static final byte CMD_DISCOVER = 0x77;
     public static final byte CMD_READY    = 0x00;
     public static final byte CMD_SYNC     = 0x02;
+    public static final byte CMD_TEMPO    = 0x01;
     public static final byte CMD_PROGRAM  = 0x03;
     public static final byte CMD_APPLY    = 0x04;
 

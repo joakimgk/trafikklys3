@@ -25,6 +25,10 @@ public class Client {
         mTrafficLight = null; // not mapped up in UX yet!
     }
 
+    public InetAddress getAddress() {
+        return this.addr;
+    }
+
     @Override
     public String toString() {
         return "Client{" +

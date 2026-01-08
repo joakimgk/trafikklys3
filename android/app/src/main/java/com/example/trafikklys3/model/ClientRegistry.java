@@ -9,20 +9,15 @@ import java.util.Map;
 
 public class ClientRegistry {
 
-    public interface Listener {
-        void onClientAdded(Client client);
-        void onClientUpdated(Client client);
-    }
-
     private static final String TAG = "ClientRegistry";
 
     private int ID = 0;
 
     private final Map<Integer, Client> clients = new HashMap<>();
 
-    private Listener listener;
+    private ClientListener listener;
 
-    public void setListener(Listener listener) {
+    public void setListener(ClientListener listener) {
         this.listener = listener;
     }
 

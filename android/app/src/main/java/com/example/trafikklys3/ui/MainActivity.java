@@ -36,8 +36,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         mContainer = findViewById(R.id.traffic_light_container);
-        controller = new ShowController(mContainer);
-
+        serverService = new ServerService(this);
+        controller = new ShowController(serverService, mContainer);
+        serverService.getRegistry().setListener(controller);
 
         tempoIndicator = findViewById(R.id.tempoIndicator);
         tempoPlusButton = findViewById(R.id.tempoPlusButton);
@@ -57,17 +58,12 @@ public class MainActivity extends AppCompatActivity {
         // perform seek bar change listener event used for getting the progress value
         tempoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser) return;
-
-                tempo = Math.max(1, progress);
-                tempoIndicator.setText("tempo: " + tempo);
-
-                checkTempo(tempo);
-            }
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {}
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                checkTempo(Math.max(1, seekBar.getProgress()));
+            }
         });
 
     }
@@ -91,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        serverService = new ServerService(this, controller);
         try {
             serverService.start();
         } catch (SocketException e) {

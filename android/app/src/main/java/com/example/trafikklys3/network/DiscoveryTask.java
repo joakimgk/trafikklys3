@@ -21,7 +21,7 @@ public class DiscoveryTask implements Runnable {
     @Override
     public void run() {
         byte[] pkt = EspProtocol.buildCommand(EspProtocol.CMD_DISCOVER);
-        server.send(pkt, broadcastAddr);
+        server.sendBroadcast(pkt);
     }
 }
 
