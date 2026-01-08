@@ -30,6 +30,7 @@ int state = LOW;
 const uint32 clientID = system_get_chip_id();
 char clientIDstring[9];
 
+volatile bool syncRequested = false;
 volatile unsigned int tempo = 100;
 char program[MAX_LENGTH];
 char rec_program[MAX_LENGTH];
@@ -48,9 +49,13 @@ volatile bool blinkFlag = false;
 
 // ISR to Fire when Timer is triggered
 void ICACHE_RAM_ATTR onTime() {
-  //Serial.print(ticks);
-  //Serial.print(" ");
-  if (ticks++ >= tempo) {
+  if (syncRequested) {
+    ticks = 0;
+    syncRequested = false;
+    return;
+  }
+  ticks++;
+  if (ticks >= tempo) {
     blinkFlag = true;
     ticks = 0;
     // tempo = newTempo;  // reset tempo only when current interval is complete
@@ -288,6 +293,10 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
   Serial.println();
 
   switch (cmd) {
+
+    case 0x77:
+      syncRequested = true;
+      break;
 
     case 0x00: // READY
       ready = true;
