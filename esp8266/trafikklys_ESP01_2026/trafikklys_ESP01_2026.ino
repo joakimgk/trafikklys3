@@ -297,7 +297,7 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       break;
 
     case 0x01:  // TEMPO
-      test = payload[2];
+      test = payload[0];
 
       // safety....
       if (test < 1) test = 1;
@@ -316,7 +316,7 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
     case 0x03:  // MOTTA PROGRAM  (dump payload inn i *rec_program)
       //memcpy(rec_program, payload, len);  
       for (i = 0; i < len; i++) {
-        rec_program[i] = payload[i + 2];
+        rec_program[i] = payload[i];
       }
       rec_length = len;
       break;
