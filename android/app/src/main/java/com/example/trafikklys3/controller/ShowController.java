@@ -1,7 +1,7 @@
 package com.example.trafikklys3.controller;
 
 import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
-import static com.example.trafikklys3.network.EspProtocol.CMD_RESET;
+import static com.example.trafikklys3.network.EspProtocol.CMD_SWAP;
 import static com.example.trafikklys3.network.EspProtocol.CMD_TEMPO;
 
 import android.os.Handler;
@@ -12,7 +12,6 @@ import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientListener;
 import com.example.trafikklys3.network.EspProtocol;
 import com.example.trafikklys3.network.NetworkSender;
-import com.example.trafikklys3.network.ServerService;
 import com.example.trafikklys3.ui.TrafficLightContainer;
 
 public class ShowController implements ClientListener {
@@ -48,7 +47,7 @@ public class ShowController implements ClientListener {
     }
 
     public void resetProgram() {
-        network.sendToAll(EspProtocol.buildCommand(CMD_RESET));
+        network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
     }
 
     @Override
