@@ -44,7 +44,7 @@ public class ServerService implements NetworkSender {
     private DatagramSocket socket;
 
     private ExecutorService receiverExecutor;
-    private ScheduledExecutorService discoveryScheduler, retransmitScheduler;
+    private ScheduledExecutorService discoveryScheduler, retransmitScheduler, syncScheduler;
 
     private ClientRegistry registry;
     private EspProtocol protocolHandler;
@@ -93,6 +93,9 @@ public class ServerService implements NetworkSender {
 
         // ---- Discovery broadcast ----
         startUdpDiscovery();
+
+        // ---- Sync broadcast ----
+        startSync();
     }
 
     public ClientRegistry getRegistry() {
@@ -136,6 +139,15 @@ public class ServerService implements NetworkSender {
         discoveryScheduler.scheduleAtFixedRate(
                 new DiscoveryTask(this),
                 0, 10, TimeUnit.SECONDS
+        );
+    }
+
+    // ---- Sync scheduling ----
+    private void startSync() {
+        syncScheduler = Executors.newSingleThreadScheduledExecutor();
+        syncScheduler.scheduleAtFixedRate(
+                new SyncTask(this),
+                0, 1, TimeUnit.SECONDS
         );
     }
 

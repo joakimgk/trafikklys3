@@ -1,29 +1,19 @@
 package com.example.trafikklys3.network;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
 public class DiscoveryTask implements Runnable {
 
     private final ServerService server;
-    private final InetAddress broadcastAddr;
+    private final byte[] discoveryPacket;
 
     public DiscoveryTask(ServerService server) {
         this.server = server;
-        try {
-            this.broadcastAddr =
-                    InetAddress.getByName("255.255.255.255");
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        }
+        this.discoveryPacket = EspProtocol.buildCommand(EspProtocol.CMD_DISCOVER);
     }
 
     @Override
     public void run() {
-        byte[] pkt = EspProtocol.buildCommand(EspProtocol.CMD_DISCOVER);
-        server.beacon(pkt);
+        server.beacon(discoveryPacket);
     }
 
-    // TODO: Make a separate SyncTask (which uses sendToAll, instead of broadcast)
 }
 
