@@ -34,7 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private Button changeProgram, resetProgram, setupButton;
     private SeekBar tempoSlider;
 
-    private ShowController controller;
+    private ShowController showController;
 
     private SetupController setupController;
 
@@ -46,10 +46,10 @@ public class MainActivity extends AppCompatActivity {
         mContainer = findViewById(R.id.traffic_light_container);
 
         serverService = new ServerService(this);
-        controller = new ShowController(serverService, mContainer);
-        serverService.getRegistry().setListener(controller);
+        showController = new ShowController(serverService, mContainer, serverService.getRegistry());
+        serverService.getRegistry().setListener(showController);
 
-        setupController = new SetupController(serverService.getRegistry(), mContainer, serverService);
+        setupController = new SetupController(serverService.getRegistry(), mContainer, serverService, showController);
         mContainer.setSetupController(setupController);
 
         setupButton = findViewById(R.id.setupButton);
@@ -75,22 +75,16 @@ public class MainActivity extends AppCompatActivity {
         });
 
         changeProgram.setOnClickListener(v -> {
+            // TODO: Use programs from Animate
             program++;
             if (program == PROGRAMS.length) program = 0;
             int len = PROGRAMS[program].length;
-            Log.v("JOAKIM", "Send program #" + program + " (" + len + " bytes)");
-            //if (Utility.clients.size() < 1) {
-            //    Log.e("MainActivity", "No clients");
-            //} else {
-            controller.changeProgram(PROGRAMS[program]);
-            // TODO: Send different parts of program to different clients...
-            //clients.get(0).transmit(payload);
-            //}
+            showController.transmitProgram(PROGRAMS[program]);
         });
 
         resetProgram.setOnClickListener(v -> {
             Log.v("JOAKIM", "Send reset");
-            controller.resetProgram();
+            showController.resetProgram();
         });
 
         // perform seek bar change listener event used for getting the progress value
@@ -115,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         tempo = newTempo;
         updateTempoDisplay();
 
-        controller.setTempo(tempo);
+        showController.setTempo(tempo);
     }
 
     private void updateTempoDisplay() {
@@ -130,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (SocketException e) {
             throw new RuntimeException(e);
         }
-        controller.start();
+        showController.start();
     }
 
     @Override
@@ -140,6 +134,6 @@ public class MainActivity extends AppCompatActivity {
             serverService.stop();
             serverService = null;
         }
-        controller.stop();
+        showController.stop();
     }
 }

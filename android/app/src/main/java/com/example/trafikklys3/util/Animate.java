@@ -67,11 +67,11 @@ public class Animate {
         return (c.mTrafficLight.getCellOrientation() % 180) == 0;
     }
 
-    private static int countVerticalMiddles() {
+    private static int countVerticalMiddles(ArrayList<Client> clients) {
         int count = 0;
-        for (int i = 0; i < Utility.clients.size(); i++) {
-            if (i == 0 || i == Utility.clients.size() -1) continue;
-            Client c = Utility.clients.get(i);
+        for (int i = 0; i < clients.size(); i++) {
+            if (i == 0 || i == clients.size() -1) continue;
+            Client c = clients.get(i);
             if (isVertical(c)) {
                 count++;
             }
@@ -109,19 +109,19 @@ public class Animate {
         return newArray;
     }
 
-    public static ArrayList<Program> Pendulum() {
-        ArrayList<Program> program = Wave();
+    public static ArrayList<Program> Pendulum(ArrayList<Client> clients) {
+        ArrayList<Program> program = Wave(clients);
         for (Program p : program) {
             p.mProgram = timeShift(p.mProgram);
         }
         return program;
     }
 
-    public static ArrayList<Program> Sink() {
+    public static ArrayList<Program> Sink(ArrayList<Pair<Client, Client>> horizontalPairs) {
         ArrayList<Program> program = new ArrayList<>();
 
         // determine "mirrored pairs" (RYG-GYR or GYR-RYG)
-        for (Pair<Client, Client> p : Utility.horizontalPairs) {
+        for (Pair<Client, Client> p : horizontalPairs) {
             byte[] b = p.first.mTrafficLight.getCellOrientation() == 90 ? reverse(TRAIL) : TRAIL;
             program.add(new Program(b, p.first));
             program.add(new Program(b, p.second));
@@ -130,19 +130,19 @@ public class Animate {
         return program;
     }
 
-    public static ArrayList<Program> Wave() {
-        ArrayList<Program> program = Trail();
-        ArrayList<Program> program2 = reverse(Trail());
+    public static ArrayList<Program> Wave(ArrayList<Client> clients) {
+        ArrayList<Program> program = Trail(clients);
+        ArrayList<Program> program2 = reverse(Trail(clients));
 
         mergePrograms(program, program2);
         return program;
     }
 
-    public static ArrayList<Program> Trail() {
-        Collections.sort(Utility.clients, new Client.ClientsComparator());
-        int verticalMiddles = countVerticalMiddles();
+    public static ArrayList<Program> Trail(ArrayList<Client> clients) {
+        Collections.sort(clients, new Client.ClientsComparator());
+        int verticalMiddles = countVerticalMiddles(clients);
 
-        int len = Utility.clients.size() + verticalMiddles;
+        int len = clients.size() + verticalMiddles;
         ArrayList<Program> p = new ArrayList<>(len);
 
         // fill all with empty programs, of correct length
@@ -150,11 +150,11 @@ public class Animate {
         Arrays.fill(emptyBytes, NON);
 
         int pos = 0;
-        for (int i = 0; i < Utility.clients.size(); i++) {
-            Client client = Utility.clients.get(i);
+        for (int i = 0; i < clients.size(); i++) {
+            Client client = clients.get(i);
             byte[] prog = isReversed(client) ? reverse(TRAIL) : TRAIL;
 
-            if (i > 0 && i < Utility.clients.size() && isVertical(client)) {
+            if (i > 0 && i < clients.size() && isVertical(client)) {
                 // add extra step
                 Program tmp = new Program(replace(
                         emptyBytes,

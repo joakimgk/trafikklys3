@@ -1,12 +1,7 @@
 package com.example.trafikklys3.controller;
 
-import static com.example.trafikklys3.model.Programs.PROGRAMS;
-import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
-import static com.example.trafikklys3.network.EspProtocol.CMD_SWAP;
-
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
-import com.example.trafikklys3.network.EspProtocol;
 import com.example.trafikklys3.network.ServerService;
 import com.example.trafikklys3.ui.TrafficLight;
 import com.example.trafikklys3.ui.TrafficLightContainer;
@@ -29,6 +24,7 @@ public class SetupController implements TrafficLightListener {
     private final ClientRegistry clientRegistry;
     private final TrafficLightContainer lightContainer;
     private ServerService serverService;
+    private ShowController showController;
 
     private List<Client> setupClients;
     private List<TrafficLight> setupLights;
@@ -41,10 +37,13 @@ public class SetupController implements TrafficLightListener {
 
     public SetupController(ClientRegistry registry,
                            TrafficLightContainer container,
-                           ServerService serverService) {
+                           ServerService serverService,
+                           ShowController controller) {
+
         this.clientRegistry = registry;
         this.lightContainer = container;
         this.serverService = serverService;
+        this.showController = controller;
     }
 
     public void startSetup() {
@@ -87,8 +86,9 @@ public class SetupController implements TrafficLightListener {
     }
 
     private void onSetupFinished() {
-        serverService.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, PROGRAMS[1]));
-        serverService.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
+        //serverService.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, PROGRAMS[1]));
+        //serverService.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
+        showController.startShow();
     }
 
     private void startIdentification(Client client) {
