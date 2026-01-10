@@ -11,6 +11,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.trafikklys3.R;
+import com.example.trafikklys3.controller.SetupController;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.network.ServerService;
 
@@ -30,10 +31,12 @@ public class MainActivity extends AppCompatActivity {
     private TrafficLightContainer mContainer;
     private TextView tempoIndicator;
     private Button tempoPlusButton, tempoMinusButton;
-    private Button changeProgram, resetProgram;
+    private Button changeProgram, resetProgram, setupButton;
     private SeekBar tempoSlider;
 
     private ShowController controller;
+
+    private SetupController setupController;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,10 +44,15 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         mContainer = findViewById(R.id.traffic_light_container);
+
         serverService = new ServerService(this);
         controller = new ShowController(serverService, mContainer);
         serverService.getRegistry().setListener(controller);
 
+        setupController = new SetupController(serverService.getRegistry(), mContainer, serverService);
+        mContainer.setSetupController(setupController);
+
+        setupButton = findViewById(R.id.setupButton);
         changeProgram = findViewById(R.id.changeProgram);
         resetProgram = findViewById(R.id.resetProgram);
         tempoIndicator = findViewById(R.id.tempoIndicator);
@@ -53,6 +61,10 @@ public class MainActivity extends AppCompatActivity {
         tempoSlider = findViewById(R.id.tempoSlider);
 
         updateTempoDisplay();
+
+        setupButton.setOnClickListener(v -> {
+            setupController.startSetup();
+        });
 
         tempoPlusButton.setOnClickListener(v -> {
             checkTempo(tempo + 1);

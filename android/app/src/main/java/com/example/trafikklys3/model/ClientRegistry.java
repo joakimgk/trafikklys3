@@ -2,6 +2,8 @@ package com.example.trafikklys3.model;
 
 import android.util.Log;
 
+import com.example.trafikklys3.network.ServerService;
+
 import java.net.InetAddress;
 import java.util.Collection;
 import java.util.HashMap;
@@ -17,6 +19,12 @@ public class ClientRegistry {
 
     private ClientListener listener;
 
+    private ServerService serverService;
+
+    public ClientRegistry(ServerService serverService) {
+        this.serverService = serverService;
+    }
+
     public void setListener(ClientListener listener) {
         this.listener = listener;
     }
@@ -27,7 +35,7 @@ public class ClientRegistry {
 
         if (client == null) {
             isNew = true;
-            client = new Client(ID++, clientID, addr);
+            client = new Client(ID++, clientID, addr, serverService);
             clients.put(clientID, client);
         }
 

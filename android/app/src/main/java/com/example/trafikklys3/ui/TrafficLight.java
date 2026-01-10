@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 import androidx.annotation.Nullable;
 
 import com.example.trafikklys3.R;
+import com.example.trafikklys3.controller.TrafficLightListener;
 
 public class TrafficLight extends FrameLayout
 {
@@ -22,6 +23,8 @@ public class TrafficLight extends FrameLayout
     private boolean active = false;
 
     private LinearLayout mLightContainer = null;
+
+    private TrafficLightListener listener;
 
     public TrafficLight(Context context)
     {
@@ -73,9 +76,18 @@ public class TrafficLight extends FrameLayout
         if (!active) mLightContainer.setAlpha(0.4F);  // initially inactive
     }
 
+    public void setListener(TrafficLightListener listener) {
+        this.listener = listener;
+    }
+
     public void setActive() {
         mLightContainer.setAlpha(0.9F);  // active
         active = true;
+    }
+
+    public void setInactive() {
+        mLightContainer.setAlpha(0.4F);  // active
+        active = false;
     }
 
     public int getCellOrientation()
@@ -160,10 +172,10 @@ public class TrafficLight extends FrameLayout
                 if ( ev.getEventTime() - ev.getDownTime() < clickThreshold &&
                         Math.max( ev.getRawX() - dragStartRawX,  ev.getRawY() - dragStartRawY) < getMeasuredWidth() * 0.5f														)
                 {
-                    if (parent.mAssigning) {
+                    if (listener.isAssigning()) {
                         //Utility._mapClient.setTrafficLight(this);
                         mLightContainer.setBackgroundResource(R.drawable.border);
-                        //MainActivity.mapClientTrafficLight();
+                        listener.onTrafficLightClicked(this);
                     } else {
 
                         this.setTranslationX(0);

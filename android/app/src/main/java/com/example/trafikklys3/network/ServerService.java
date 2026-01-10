@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements NetworkSender {
 
+
+
     private static final String TAG = "ServerService";
 
     private static final int UDP_PORT = 4210;
@@ -57,7 +59,7 @@ public class ServerService implements NetworkSender {
         this.context = context.getApplicationContext();
 
         // ---- Client Registry ----
-        this.registry = new ClientRegistry();
+        this.registry = new ClientRegistry(this);
         this.protocolHandler = new EspProtocol(registry);
 
         try {
@@ -122,8 +124,10 @@ public class ServerService implements NetworkSender {
             multicastLock.release();
     }
 
+
     // ---- One-off UDP send (unicast or broadcast) ----
     private synchronized void send(byte[] packet, InetAddress addr) {
+
         try {
             DatagramPacket p =
                     new DatagramPacket(packet, packet.length, addr, UDP_PORT);
@@ -172,7 +176,7 @@ public class ServerService implements NetworkSender {
     }
 
     @Override
-    public void sendToClient(Client client, byte[] packet) {
+    public void sendUnicast(Client client, byte[] packet) {
         // Unicast
         sendRepeated(packet, client.getAddress(), REPEAT_UNICAST, INTERVAL_UNICAST);
         /*
@@ -201,7 +205,7 @@ public class ServerService implements NetworkSender {
     @Override
     public void sendToAll(byte[] packet) {
         for (Client c : registry.getClients()) {
-            sendToClient(c, packet);
+            sendUnicast(c, packet);
         }
     }
 }

@@ -9,8 +9,13 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.example.trafikklys3.controller.SetupController;
 import com.example.trafikklys3.util.DimenUtils;
 import com.example.trafikklys3.R;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class TrafficLightContainer extends FrameLayout
 {
@@ -20,6 +25,10 @@ public class TrafficLightContainer extends FrameLayout
     public boolean mAssigning = false;
 
     private TextView mClientIdLabel;
+
+    private final List<TrafficLight> lights = new ArrayList<>();
+
+    private SetupController setupController;
 
     int newPosX = 0;
 
@@ -122,11 +131,21 @@ public class TrafficLightContainer extends FrameLayout
         }
     }
 
+    public void setSetupController(SetupController setupController) {
+        this.setupController = setupController;
+    }
+
     public void  addCell()
     {
         TrafficLight newLight = new TrafficLight(getContext(), newPosX );
+        newLight.setListener(setupController);
+        lights.add(newLight);
         newPosX += cellPixelSize;
         addView( newLight );
+    }
+
+    public List<TrafficLight> getLights() {
+        return Collections.unmodifiableList(lights);
     }
 
     public static class Coordinates
