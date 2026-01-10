@@ -294,10 +294,6 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
 
   switch (cmd) {
 
-    case 0x77:
-      syncRequested = true;
-      break;
-
     case 0x00: // READY
       ready = true;
       length = 1;
@@ -339,6 +335,9 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       step = 0;  // og RESET!
       break;
 
+    case 0x05:
+      syncRequested = true;
+      break;
       
     default:
       break;
