@@ -40,6 +40,10 @@ public class Client {
         return this.addr;
     }
 
+    public void setAddress(InetAddress addr) {
+        this.addr = addr;
+    }
+
     public void setTrafficLight(TrafficLight unit) {
         this.mTrafficLight = unit;
     }

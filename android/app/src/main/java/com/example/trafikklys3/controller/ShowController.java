@@ -21,11 +21,15 @@ import java.util.ArrayList;
 
 public class ShowController implements ClientListener {
 
+    private static final String TAG = "ShowController";
+
     private final NetworkSender network;
 
     private final TrafficLightContainer container;
 
     private ClientRegistry registry;
+
+    private ArrayList<Program> currentProgram;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -57,6 +61,7 @@ public class ShowController implements ClientListener {
     }
 
     public void transmitProgram(ArrayList<Program> program) {
+        currentProgram = program;
         for (Program p : program) {
             network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));
         }
@@ -76,7 +81,13 @@ public class ShowController implements ClientListener {
 
     @Override
     public void onClientUpdated(Client client) {
-
+        Log.v(TAG, "onClientUpdated clientID = " + client.clientID);
+        for (Program p : currentProgram) {
+            if (p.mClient.clientID == client.clientID) {
+                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));
+                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_SWAP));
+            }
+        }
     }
 
     public void startShow() {

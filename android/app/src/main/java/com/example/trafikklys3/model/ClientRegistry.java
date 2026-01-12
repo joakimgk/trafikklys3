@@ -39,6 +39,8 @@ public class ClientRegistry {
             isNew = true;
             client = new Client(ID++, clientID, addr, serverService);
             clients.put(clientID, client);
+        } else {
+            client.setAddress(addr);
         }
 
         if (listener != null) {
