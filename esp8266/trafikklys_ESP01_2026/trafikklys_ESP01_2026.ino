@@ -13,6 +13,7 @@
 #define RESET_TIME 500
 
 #define CMD_ANNOUNCE 0x77
+#define CMD_HEARTBEAT 0x66
 
 uint8_t udpRxBuf[MAX_LENGTH];
 size_t udpRxLen = 0;
@@ -37,6 +38,7 @@ char rec_program[MAX_LENGTH];
 volatile int length;
 int rec_length;
 volatile int step = 0;
+int heartbeat_counter = 0;
 
 bool offline = false;
 
@@ -215,6 +217,14 @@ void loop() {
   if (blinkFlag) {
     blink();
     blinkFlag = false;
+    heartbeat_counter++;
+    if (remoteKnown && heartbeat_counter > 10) {
+      heartbeat_counter = 0;
+      uint8_t packet[6];
+      packet[0] = CMD_HEARTBEAT;
+      packet[1] = 0;
+      sendUdp(packet, sizeof(packet));
+    }
   }
 
   pollUdp();
@@ -275,7 +285,8 @@ ICACHE_RAM_ATTR void blink() {
 void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
   uint8_t i;
   uint16_t test;
-  
+
+  /*
   Serial.print(F("RX cmd=0x"));
   if (cmd < 0x10) Serial.print('0');
   Serial.print(cmd, HEX);
@@ -291,6 +302,7 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
     Serial.print(' ');
   }
   Serial.println();
+  */
 
   switch (cmd) {
 
