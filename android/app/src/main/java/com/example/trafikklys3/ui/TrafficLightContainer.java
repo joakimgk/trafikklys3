@@ -9,7 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.example.trafikklys3.controller.SetupController;
+import com.example.trafikklys3.network.SetupService;
 import com.example.trafikklys3.util.DimenUtils;
 import com.example.trafikklys3.R;
 
@@ -28,7 +28,7 @@ public class TrafficLightContainer extends FrameLayout
 
     private final List<TrafficLight> lights = new ArrayList<>();
 
-    private SetupController setupController;
+    private SetupService setupService;
 
     int newPosX = 0;
 
@@ -131,14 +131,14 @@ public class TrafficLightContainer extends FrameLayout
         }
     }
 
-    public void setSetupController(SetupController setupController) {
-        this.setupController = setupController;
+    public void setSetupController(SetupService setupService) {
+        this.setupService = setupService;
     }
 
     public void  addCell()
     {
         TrafficLight newLight = new TrafficLight(getContext(), newPosX );
-        newLight.setListener(setupController);
+        newLight.setListener(setupService);
         lights.add(newLight);
         newPosX += cellPixelSize;
         addView( newLight );

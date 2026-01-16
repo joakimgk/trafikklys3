@@ -1,25 +1,17 @@
-package com.example.trafikklys3.controller;
+package com.example.trafikklys3.network;
 
+import com.example.trafikklys3.controller.ShowController;
+import com.example.trafikklys3.controller.TrafficLightListener;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
-import com.example.trafikklys3.network.ServerService;
+import com.example.trafikklys3.model.SetupPhase;
 import com.example.trafikklys3.ui.TrafficLight;
 import com.example.trafikklys3.ui.TrafficLightContainer;
 
 import java.util.ArrayList;
 import java.util.List;
 
-enum SetupPhase {
-    IDLE,           // not in setup mode
-    WAITING,        // setup started, but no client selected yet
-    IDENTIFYING,    // ESP blinking
-    PLACING,        // user dragging
-    ROTATING,       // user rotating
-    CONFIRMED,      // mapped, waiting for Next
-    DONE            // all clients mapped
-}
-
-public class SetupController implements TrafficLightListener {
+public class SetupService implements TrafficLightListener {
 
     private final ClientRegistry clientRegistry;
     private final TrafficLightContainer lightContainer;
@@ -35,10 +27,10 @@ public class SetupController implements TrafficLightListener {
 
     private SetupPhase phase = SetupPhase.IDLE;
 
-    public SetupController(ClientRegistry registry,
-                           TrafficLightContainer container,
-                           ServerService serverService,
-                           ShowController controller) {
+    public SetupService(ClientRegistry registry,
+                        TrafficLightContainer container,
+                        ServerService serverService,
+                        ShowController controller) {
 
         this.clientRegistry = registry;
         this.lightContainer = container;
@@ -56,7 +48,7 @@ public class SetupController implements TrafficLightListener {
         currentIndex = -1;
 
         for (Client c : clientRegistry.getClients()) {
-            c.stopIdentify();
+            serverService.stopIdentify(c);
         }
 
         // Ensure all lights are visibly "unassigned"
@@ -92,12 +84,12 @@ public class SetupController implements TrafficLightListener {
     }
 
     private void startIdentification(Client client) {
-        client.identify();
+        serverService.identify(client);
     }
 
     private void stopIdentification() {
         if (currentClient != null) {
-            currentClient.stopIdentify();
+            serverService.stopIdentify(currentClient);
         }
     }
 

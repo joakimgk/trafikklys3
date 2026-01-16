@@ -1,5 +1,7 @@
 package com.example.trafikklys3.network;
 
+import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
+import static com.example.trafikklys3.network.EspProtocol.CMD_SWAP;
 import static com.example.trafikklys3.network.EspProtocol.buildCommand;
 
 import android.content.Context;
@@ -9,6 +11,7 @@ import android.util.Log;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
+import com.example.trafikklys3.model.Programs;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -50,16 +53,16 @@ public class ServerService implements NetworkSender {
 
     private ClientRegistry registry;
     private EspProtocol protocolHandler;
-    private ShowController controller;
-
     private ExecutorService sendExecutor;
 
 
-    public ServerService(Context context) {
-        this.context = context.getApplicationContext();
+
+
+    public ServerService(Context context, ClientRegistry registry) {
+        this.context = context;
 
         // ---- Client Registry ----
-        this.registry = new ClientRegistry(this);
+        this.registry = registry;
         this.protocolHandler = new EspProtocol(registry);
 
         try {
@@ -88,7 +91,7 @@ public class ServerService implements NetworkSender {
 
         // ---- Receiver thread ----
         receiverExecutor = Executors.newSingleThreadExecutor();
-        receiverExecutor.execute(new UdpReceiver(socket, protocolHandler::handleUdpPacket));
+        receiverExecutor.execute(new UdpReceiver(socket, EspDecoder::handleUdpPacket, registry));
 
         // ---- Retransmit thread ----
         retransmitScheduler = Executors.newSingleThreadScheduledExecutor();
@@ -207,5 +210,16 @@ public class ServerService implements NetworkSender {
         for (Client c : registry.getClients()) {
             sendUnicast(c, packet);
         }
+    }
+
+
+    public void identify(Client client) {
+        sendUnicast(client, EspProtocol.buildCommand(CMD_PROGRAM, Programs.IDENTIFY));
+        sendUnicast(client, EspProtocol.buildCommand(CMD_SWAP));
+    }
+
+    public void stopIdentify(Client client) {
+        sendUnicast(client, EspProtocol.buildCommand(CMD_PROGRAM, new byte[]{Programs.NON}));
+        sendUnicast(client, EspProtocol.buildCommand(CMD_SWAP));
     }
 }

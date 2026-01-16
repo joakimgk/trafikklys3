@@ -21,23 +21,20 @@ public class ClientRegistry {
 
     private ClientListener listener;
 
-    private ServerService serverService;
-
-    public ClientRegistry(ServerService serverService) {
-        this.serverService = serverService;
+    public ClientRegistry() {
     }
 
     public void setListener(ClientListener listener) {
         this.listener = listener;
     }
 
-    public synchronized Client onAnnounce(int clientID, InetAddress addr) {
+    public synchronized Client onAnnounce(String clientID, InetAddress addr) {
         Client client = clients.get(clientID);
         boolean isNew = false;
 
         if (client == null) {
             isNew = true;
-            client = new Client(ID++, clientID, addr, serverService);
+            client = new Client(ID++, clientID, addr);
             clients.put(clientID, client);
         } else {
             client.setAddress(addr);

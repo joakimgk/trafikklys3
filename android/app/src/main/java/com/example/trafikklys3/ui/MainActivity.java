@@ -2,6 +2,7 @@ package com.example.trafikklys3.ui;
 
 import static com.example.trafikklys3.model.Programs.PROGRAMS;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Button;
@@ -11,8 +12,9 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.trafikklys3.R;
-import com.example.trafikklys3.controller.SetupController;
+import com.example.trafikklys3.network.SetupService;
 import com.example.trafikklys3.controller.ShowController;
+import com.example.trafikklys3.model.ClientRegistry;
 import com.example.trafikklys3.network.ServerService;
 
 import java.net.SocketException;
@@ -36,7 +38,9 @@ public class MainActivity extends AppCompatActivity {
 
     private ShowController showController;
 
-    private SetupController setupController;
+    private SetupService setupService;
+
+    private ClientRegistry registry;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,12 +49,14 @@ public class MainActivity extends AppCompatActivity {
 
         mContainer = findViewById(R.id.traffic_light_container);
 
-        serverService = new ServerService(this);
-        showController = new ShowController(serverService, mContainer, serverService.getRegistry());
-        serverService.getRegistry().setListener(showController);
+        registry = new ClientRegistry();
+        Context context = getApplicationContext();
+        serverService = new ServerService(context, registry);
+        showController = new ShowController(serverService, mContainer, registry);
+        registry.setListener(showController);
 
-        setupController = new SetupController(serverService.getRegistry(), mContainer, serverService, showController);
-        mContainer.setSetupController(setupController);
+        setupService = new SetupService(registry, mContainer, serverService, showController);
+        mContainer.setSetupController(setupService);
 
         setupButton = findViewById(R.id.setupButton);
         changeProgram = findViewById(R.id.changeProgram);
@@ -63,7 +69,7 @@ public class MainActivity extends AppCompatActivity {
         updateTempoDisplay();
 
         setupButton.setOnClickListener(v -> {
-            setupController.startSetup();
+            setupService.startSetup();
         });
 
         tempoPlusButton.setOnClickListener(v -> {

@@ -22,15 +22,13 @@ public class Client {
     InetAddress addr;
     byte[] buffer;
     public TrafficLight mTrafficLight;
-    private final ServerService serverService;
 
     boolean active = false;
 
-    public Client (int id, long cid, InetAddress addr, ServerService serverService) {
+    public Client (int id, long cid, InetAddress addr) {
         this.ID = id;
         this.clientID = cid;
         this.addr = addr;
-        this.serverService = serverService;
         //rotation = ID % 2 == 0 ? 90 : 0;
         this.created = new Timestamp(System.currentTimeMillis());
         mTrafficLight = null; // not mapped up in UX yet!
@@ -48,15 +46,7 @@ public class Client {
         this.mTrafficLight = unit;
     }
 
-    public void identify() {
-        serverService.sendUnicast(this, EspProtocol.buildCommand(CMD_PROGRAM, Programs.IDENTIFY));
-        serverService.sendUnicast(this, EspProtocol.buildCommand(CMD_SWAP));
-    }
 
-    public void stopIdentify() {
-        serverService.sendUnicast(this, EspProtocol.buildCommand(CMD_PROGRAM, new byte[]{Programs.NON}));
-        serverService.sendUnicast(this, EspProtocol.buildCommand(CMD_SWAP));
-    }
 
     @Override
     public String toString() {
