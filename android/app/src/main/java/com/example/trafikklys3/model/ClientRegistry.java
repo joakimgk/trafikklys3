@@ -17,7 +17,7 @@ public class ClientRegistry {
 
     private int ID = 0;
 
-    private final Map<Integer, Client> clients = new HashMap<>();
+    private final Map<String, Client> clients = new HashMap<>();
 
     private ClientListener listener;
 

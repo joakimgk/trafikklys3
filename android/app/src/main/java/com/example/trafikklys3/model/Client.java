@@ -18,14 +18,14 @@ public class Client {
 
     Timestamp created;
     int ID;
-    public long clientID;
+    public String clientID;
     InetAddress addr;
     byte[] buffer;
     public TrafficLight mTrafficLight;
 
     boolean active = false;
 
-    public Client (int id, long cid, InetAddress addr) {
+    public Client (int id, String cid, InetAddress addr) {
         this.ID = id;
         this.clientID = cid;
         this.addr = addr;

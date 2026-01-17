@@ -15,14 +15,11 @@ public class EspDecoder {
 
     private static final String TAG = "EspDecoder";
 
-    public interface OnPacketHandler extends BiConsumer<String, InetAddress> {
-    }
-
     public static void handleUdpPacket(
             InetAddress from,
             byte[] data,
             int length,
-            OnPacketHandler packetHandler) {
+            ClientRegistry registry) {
 
         if (length < 2) return;
 
@@ -52,16 +49,19 @@ public class EspDecoder {
                         "ESP announce id=" + espId +
                                 " ip=" + from.getHostAddress());
 
-                packetHandler.accept(espId + "", from);  // _> onAnnounce
+                registry.onAnnounce(espId + "", from);
 
                 break;
             }
 
+            /*
             case CMD_IDENTIFY:
 
                 // .... ... processs!
 
                 packetHandler.noe(espId, from);
+
+             */
         }
     }
 }
