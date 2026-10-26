@@ -21,7 +21,7 @@ public class UdpReceiver implements Runnable {
     private ClientRegistry registry;
 
     public interface PacketHandler {
-        void onPacket(InetAddress from, byte[] data, int length, EspDecoder.OnPacketHandler packetHandler);
+        void onPacket(InetAddress from, byte[] data, int length, ClientRegistry registry);
     }
 
     public UdpReceiver(DatagramSocket socket, PacketHandler handler, ClientRegistry registry) {
@@ -41,7 +41,7 @@ public class UdpReceiver implements Runnable {
 
                 socket.receive(packet);
 
-
+                /* ALTERNATIV: Håndter innhold her
                 // pakk ut / dekod innhold
 
                 switch (cmd) {
@@ -50,13 +50,15 @@ public class UdpReceiver implements Runnable {
 
                         registr.onAnnounce()
 
-                        handler.onPacket(
-                                packet.getAddress(),
-                                packet.getData(),
-                                packet.getLength(),
-                                (String id, InetAddress address) -> registry.onAnnounce(id, address)
+                 */
 
-                        );
+                handler.onPacket(
+                        packet.getAddress(),
+                        packet.getData(),
+                        packet.getLength(),
+                        registry
+
+                );
 
             } catch (IOException e) {
                 if (!socket.isClosed()) {
