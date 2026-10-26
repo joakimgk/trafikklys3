@@ -111,10 +111,10 @@ void setup() {
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP());
 
-  length = 2;
-  tempo = 100;
-  program[0] = 0b00000010;
-  program[1] = 0b00000000;
+  // length = 2;
+  // tempo = 100;
+  // program[0] = 0b00000010;
+  // program[1] = 0b00000000;
 
   // Begin listening to UDP port
   UDP.begin(UDP_PORT);
@@ -160,6 +160,11 @@ void pollUdp() {
     packet[1] = 4;
     pack_u32(clientID, packet + 2);
     sendUdp(packet, sizeof(packet));
+
+    length = 2;
+    tempo = 100;
+    program[0] = 0b00000100;
+    program[1] = 0b00000000;
   }
 
   if (udpRxLen != packetSize) {
