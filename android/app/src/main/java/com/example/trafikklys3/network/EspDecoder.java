@@ -49,7 +49,10 @@ public class EspDecoder {
                         "ESP announce id=" + espId +
                                 " ip=" + from.getHostAddress());
 
-                registry.onAnnounce(espId + "", from);
+                // optional 5th byte: unit already holds a program
+                boolean hasProgram = payload.length > 4 && payload[4] != 0;
+
+                registry.onAnnounce(espId + "", from, hasProgram);
 
                 break;
             }

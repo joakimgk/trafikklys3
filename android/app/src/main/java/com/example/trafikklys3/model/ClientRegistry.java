@@ -28,21 +28,24 @@ public class ClientRegistry {
         this.listener = listener;
     }
 
-    public synchronized Client onAnnounce(String clientID, InetAddress addr) {
+    public synchronized Client onAnnounce(String clientID, InetAddress addr, boolean hasProgram) {
         Client client = clients.get(clientID);
         boolean isNew = false;
+        boolean addressChanged = false;
 
         if (client == null) {
             isNew = true;
             client = new Client(ID++, clientID, addr);
             clients.put(clientID, client);
         } else {
+            addressChanged = !addr.equals(client.getAddress());
             client.setAddress(addr);
         }
 
         if (listener != null) {
             if (isNew) listener.onClientAdded(client);
-            else listener.onClientUpdated(client);
+            // Only resend the program if the unit lost it (reboot) or moved
+            else if (!hasProgram || addressChanged) listener.onClientUpdated(client);
         }
 
         Log.d(TAG, client.toString());
@@ -65,16 +68,20 @@ public class ClientRegistry {
         verticalGroup.clear();
         horizontalPairs.clear();
 
-        // vertical units
+        ArrayList<Client> placed = new ArrayList<>();
         for (Client c : clients.values()) {
+            if (c.mTrafficLight != null) placed.add(c);
+        }
+
+        // vertical units
+        for (Client c : placed) {
             if (c.mTrafficLight.getCellOrientation() % 180 == 0) {
                 verticalGroup.add(c);
             }
         }
         // horizontal pairs (may overlap)
         Client prev = null;
-        for (int i = 0; i < clients.size(); i++) {
-            Client c = clients.get(i);
+        for (Client c : placed) {
             if (prev != null) {
                 if (c.mTrafficLight.getCellOrientation() % 180 == 90) {
                     if (prev.mTrafficLight.getCellOrientation() % 180 == 90) {

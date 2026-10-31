@@ -82,6 +82,7 @@ public class ShowController implements ClientListener {
     @Override
     public void onClientUpdated(Client client) {
         Log.v(TAG, "onClientUpdated clientID = " + client.clientID);
+        if (currentProgram == null) return;
         for (Program p : currentProgram) {
             if (p.mClient.clientID == client.clientID) {
                 network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));

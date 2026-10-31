@@ -138,7 +138,6 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
         if (serverService != null) {
             serverService.stop();
-            serverService = null;
         }
         showController.stop();
     }

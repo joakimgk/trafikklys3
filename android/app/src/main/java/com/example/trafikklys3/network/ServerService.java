@@ -23,7 +23,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements NetworkSender {
 
@@ -120,6 +119,9 @@ public class ServerService implements NetworkSender {
         if (discoveryScheduler != null)
             discoveryScheduler.shutdownNow();
 
+        if (syncScheduler != null)
+            syncScheduler.shutdownNow();
+
         if (retransmitScheduler != null)
             retransmitScheduler.shutdownNow();
 
@@ -164,18 +166,12 @@ public class ServerService implements NetworkSender {
             int repeatCount,
             long intervalMs) {
 
-        final AtomicInteger remaining = new AtomicInteger(repeatCount);
-
-        retransmitScheduler.scheduleAtFixedRate(() -> {
-            if (remaining.decrementAndGet() < 0) {
-                return;
-            }
-
-            sendExecutor.execute(() ->
-                send(packet, addr)
-            );
-
-        }, 0, intervalMs, TimeUnit.MILLISECONDS);
+        // One-shot sends: a fixed-rate task would keep firing after the last repeat
+        for (int i = 0; i < repeatCount; i++) {
+            retransmitScheduler.schedule(
+                    () -> sendExecutor.execute(() -> send(packet, addr)),
+                    i * intervalMs, TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override

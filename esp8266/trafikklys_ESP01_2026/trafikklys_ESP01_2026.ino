@@ -26,6 +26,7 @@ const short int RED = 2;
 IPAddress remoteAddress;
 bool remoteKnown = false;
 bool ready = false;
+bool programSet = false;  // app has swapped in a program since boot
 int state = LOW;
 
 const uint32 clientID = system_get_chip_id();
@@ -151,15 +152,10 @@ void pollUdp() {
   }
 
   udpRxLen = UDP.read(udpRxBuf, packetSize);
+  // Always reply to whoever last talked to us (phone may have changed)
+  remoteAddress = UDP.remoteIP();
   if (!remoteKnown) {
-    remoteAddress = UDP.remoteIP();
     remoteKnown = true;
-
-    uint8_t packet[6];
-    packet[0] = CMD_ANNOUNCE;
-    packet[1] = 4;
-    pack_u32(clientID, packet + 2);
-    sendUdp(packet, sizeof(packet));
 
     length = 2;
     tempo = 100;
@@ -174,6 +170,15 @@ void pollUdp() {
   }
 
   processUdpPacket(udpRxBuf, udpRxLen);
+}
+
+void sendAnnounce() {
+  uint8_t packet[7];
+  packet[0] = CMD_ANNOUNCE;
+  packet[1] = 5;
+  pack_u32(clientID, packet + 2);
+  packet[6] = programSet ? 1 : 0;
+  sendUdp(packet, sizeof(packet));
 }
 
 inline void pack_u32(uint32_t value, uint8_t *out) {
@@ -228,7 +233,7 @@ void loop() {
       uint8_t packet[6];
       packet[0] = CMD_HEARTBEAT;
       packet[1] = 0;
-      sendUdp(packet, sizeof(packet));
+      sendUdp(packet, 2);
     }
   }
 
@@ -350,10 +355,15 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       }
       length = rec_length;
       step = 0;  // og RESET!
+      programSet = true;
       break;
 
     case 0x05:
       syncRequested = true;
+      break;
+
+    case 0x77: // DISCOVER: app is looking for units
+      sendAnnounce();
       break;
       
     default:
