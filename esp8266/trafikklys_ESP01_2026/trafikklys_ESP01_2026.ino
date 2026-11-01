@@ -12,6 +12,9 @@
 #define PING_TIME 2000
 #define RESET_TIME 500
 
+#define SYNC_JUMP_TICKS 29   // beacon errors above this (~40 ms) jump straight to the target
+#define SYNC_DEBUG 1         // print one line per sync beacon on the serial port (TX only)
+
 #define CMD_ANNOUNCE 0x77
 #define CMD_HEARTBEAT 0x66
 
@@ -32,14 +35,13 @@ int state = LOW;
 const uint32 clientID = system_get_chip_id();
 char clientIDstring[9];
 
-volatile bool syncRequested = false;
+volatile bool hardSync = true;  // next sync beacon sets the position outright
 volatile unsigned int tempo = 100;
 char program[MAX_LENGTH];
 char rec_program[MAX_LENGTH];
 volatile int length;
 int rec_length;
 volatile int step = 0;
-int heartbeat_counter = 0;
 
 bool offline = false;
 
@@ -47,24 +49,14 @@ WiFiUDP UDP;
 Ticker timer;
 
 volatile int ticks = 0;
-volatile int timeSincePing = 0;
-volatile bool blinkFlag = false;
 
-// ISR to Fire when Timer is triggered
+// ISR to Fire when Timer is triggered: drives the lamps directly, so the loop() can't add jitter
 void ICACHE_RAM_ATTR onTime() {
-  if (syncRequested) {
-    ticks = 0;
-    syncRequested = false;
-    return;
-  }
   ticks++;
   if (ticks >= tempo) {
-    blinkFlag = true;
     ticks = 0;
-    // tempo = newTempo;  // reset tempo only when current interval is complete
+    blink();
   }
-  
-  timeSincePing++;
 }
 
 
@@ -224,22 +216,20 @@ void printBytes(char buf[], int len) {;
 
 
 void loop() {
-  if (blinkFlag) {
-    blink();
-    blinkFlag = false;
-    heartbeat_counter++;
-    if (remoteKnown && heartbeat_counter > 10) {
-      heartbeat_counter = 0;
-      uint8_t packet[6];
-      packet[0] = CMD_HEARTBEAT;
-      packet[1] = 0;
-      sendUdp(packet, 2);
-    }
+  static unsigned long lastHeartbeat = 0;
+
+  if (remoteKnown && millis() - lastHeartbeat > 3000) {
+    lastHeartbeat = millis();
+    uint8_t packet[6];
+    packet[0] = CMD_HEARTBEAT;
+    packet[1] = 4;
+    pack_u32(clientID, packet + 2);
+    sendUdp(packet, sizeof(packet));
   }
 
   pollUdp();
 
-  delay(10);
+  delay(2);
 }
 
 
@@ -277,17 +267,67 @@ ICACHE_RAM_ATTR int getBit(unsigned char b, int i) {
   return ((b >> i) & 0b00000001) == 1 ? on : off;
 }
 
-ICACHE_RAM_ATTR void blink() {
-  if (++step >= length) {
-    step = 0;
-  }
-
+// Write the current step to the lamps
+ICACHE_RAM_ATTR void showStep() {
   digitalWrite(GREEN, getBit(program[step], 0));
   digitalWrite(YELLOW, getBit(program[step], 1));
   digitalWrite(RED, getBit(program[step], 2));
-  
-  //Serial.print("\n" + (String)step + ": ");
-  //printByte(program[step]);
+}
+
+ICACHE_RAM_ATTR void blink() {
+  if (length < 1) return;
+  if (++step >= length) {
+    step = 0;
+  }
+  showStep();
+}
+
+// Lock to the app's show clock. Payload: tempo (u8), step counter (u32), phase within step (u16, 0..65535).
+// Every unit gets the same broadcast, so units stay in step with each other even if the
+// network delays the beacon. Small errors are corrected gradually; big ones (and the first
+// beacon after a program swap or tempo change) jump straight to the target.
+void applySync(uint8_t *p) {
+  uint8_t newTempo = p[0] < 1 ? 1 : p[0];
+  uint32_t k = ((uint32_t)p[1] << 24) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 8) | p[4];
+  uint16_t frac = ((uint16_t)p[5] << 8) | p[6];
+
+  noInterrupts();
+  int len = length;
+  if (len < 1) {
+    interrupts();
+    return;
+  }
+
+  bool jump = hardSync || newTempo != tempo;
+  tempo = newTempo;
+  int32_t M = (int32_t)len * newTempo;
+  int32_t cur = ((int32_t)step * newTempo + ticks) % M;
+  int32_t target = (int32_t)(k % len) * newTempo + (int32_t)(((uint32_t)frac * newTempo) >> 16);
+
+  int32_t err = target - cur;
+  if (err > M / 2) err -= M;
+  else if (err < -M / 2) err += M;
+
+  int32_t pos;
+  if (jump || abs(err) > SYNC_JUMP_TICKS) {
+    pos = target;
+    hardSync = false;
+  } else {
+    pos = cur + err / 2;
+  }
+  pos = ((pos % M) + M) % M;
+
+  int newStep = pos / newTempo;
+  ticks = pos % newTempo;
+  if (newStep != step) {
+    step = newStep;
+    showStep();
+  }
+  interrupts();
+
+#if SYNC_DEBUG
+  Serial.printf("sync k=%lu tempo=%u err=%ld ticks %s\n", (unsigned long)k, newTempo, (long)err, jump || abs(err) > SYNC_JUMP_TICKS ? "JUMP" : "slew");
+#endif
 }
 
 
@@ -330,14 +370,20 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       if (test < 1) test = 1;
       else if (test > 255) test = 256;
       
+      // keep the position within the step when the speed changes, then lock hard on the next beacon
+      noInterrupts();
+      ticks = (uint32_t)ticks * test / tempo;
       tempo = test;
-      if (tempo > ticks) {
-        ticks = 0;
-      }
+      hardSync = true;
+      interrupts();
       break;
       
     case 0x02:  // RESET (restart nåværende program)
+      noInterrupts();
       step = 0;
+      ticks = 0;
+      if (length > 0) showStep();
+      interrupts();
       break;
   
     case 0x03:  // MOTTA PROGRAM  (dump payload inn i *rec_program)
@@ -350,16 +396,21 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
     
     case 0x04: // BYTT PROGRAM (bytt om referanser og bruk av *program og *rec_program)
       //swapArrays(program, rec_program);
+      noInterrupts();
       for (i = 0; i < rec_length; i++) {
         program[i] = rec_program[i];
       }
       length = rec_length;
       step = 0;  // og RESET!
+      ticks = 0;
+      if (length > 0) showStep();
+      hardSync = true;
+      interrupts();
       programSet = true;
       break;
 
-    case 0x05:
-      syncRequested = true;
+    case 0x05:  // SYNC beacon
+      if (len >= 7) applySync(payload);
       break;
 
     case 0x77: // DISCOVER: app is looking for units
