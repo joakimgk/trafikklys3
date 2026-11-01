@@ -7,4 +7,5 @@ public interface NetworkSender {
     void sendBroadcast(byte[] packet);
     void beacon(byte[] packet);
     void sendToAll(byte[] packet);
+    void syncBurst();
 }

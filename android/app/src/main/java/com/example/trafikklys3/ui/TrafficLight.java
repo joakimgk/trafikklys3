@@ -23,6 +23,7 @@ public class TrafficLight extends FrameLayout
     private boolean active = false;
 
     private LinearLayout mLightContainer = null;
+    private boolean online = true;
 
     private TrafficLightListener listener;
 
@@ -85,9 +86,48 @@ public class TrafficLight extends FrameLayout
         active = true;
     }
 
+    /** The light being placed for the unit that is blinking right now. */
+    public void setWorking() {
+        mLightContainer.setAlpha(0.75F);
+    }
+
+    /** A unit that has stopped reporting is shown dim. */
+    public void setOnline(boolean online) {
+        if (online == this.online) return;
+        this.online = online;
+        setAlpha(online ? 1F : 0.4F);
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
     public void setInactive() {
         mLightContainer.setAlpha(0.4F);  // active
         active = false;
+    }
+
+    /** Sets position and orientation directly (no rotate-around-centre shift) and marks it paired. */
+    public void restore(int x, int y, int orientation)
+    {
+        mOrientation = orientation;
+        mLightContainer.setOrientation(orientation % 180 == 0 ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        mLightContainer.setRotation(orientation == 180 || orientation == 270 ? 180 : 0);
+        cellX = x;
+        cellY = y;
+        setActive();
+        requestLayout();
+    }
+
+    private static final float LAMP_ON = 1.0F;
+    private static final float LAMP_OFF = 0.2F;
+
+    /** Shows a program step: bit 0 = red, bit 1 = yellow, bit 2 = green (as in Programs). */
+    public void setLamps(byte bits)
+    {
+        for (int i = 0; i < 3; i++) {
+            mLightContainer.getChildAt(i).setAlpha(((bits >> i) & 1) != 0 ? LAMP_ON : LAMP_OFF);
+        }
     }
 
     public int getCellOrientation()
@@ -172,18 +212,11 @@ public class TrafficLight extends FrameLayout
                 if ( ev.getEventTime() - ev.getDownTime() < clickThreshold &&
                         Math.max( ev.getRawX() - dragStartRawX,  ev.getRawY() - dragStartRawY) < getMeasuredWidth() * 0.5f														)
                 {
-                    if (listener.isAssigning()) {
-                        //Utility._mapClient.setTrafficLight(this);
-                        mLightContainer.setBackgroundResource(R.drawable.border);
-                        listener.onTrafficLightClicked(this);
-                    } else {
+                    this.setTranslationX(0);
+                    this.setTranslationY(0);
 
-                        this.setTranslationX(0);
-                        this.setTranslationY(0);
-
-                        rotate();    // rotato
-                    }
-
+                    rotate();    // rotato
+                    listener.onTrafficLightChanged(this);
                 }
                 else if (mDragging)
                 {
@@ -204,6 +237,7 @@ public class TrafficLight extends FrameLayout
                     this.setTranslationY(0);
 
                     requestLayout();	// calls onLayout() in parent again
+                    if (listener != null) listener.onTrafficLightChanged(this);
                 }
 
                 mDragging = false;

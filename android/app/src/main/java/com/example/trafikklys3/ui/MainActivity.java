@@ -13,8 +13,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.trafikklys3.R;
 import com.example.trafikklys3.network.SetupService;
+import com.example.trafikklys3.controller.ShowClock;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.model.ClientRegistry;
+import com.example.trafikklys3.model.PairingStore;
 import com.example.trafikklys3.network.ServerService;
 
 import java.net.SocketException;
@@ -51,11 +53,19 @@ public class MainActivity extends AppCompatActivity {
 
         registry = new ClientRegistry();
         Context context = getApplicationContext();
-        serverService = new ServerService(context, registry);
-        showController = new ShowController(serverService, mContainer, registry);
+        ShowClock clock = new ShowClock();
+        serverService = new ServerService(context, registry, clock);
+        PairingStore pairingStore = new PairingStore(context);
+        showController = new ShowController(serverService, mContainer, registry, pairingStore, clock);
         registry.setListener(showController);
+        tempo = showController.getTempo();
 
-        setupService = new SetupService(registry, mContainer, serverService, showController);
+        // Units paired in an earlier session show up (offline) right away
+        for (String id : pairingStore.savedIds()) {
+            registry.addKnown(id);
+        }
+
+        setupService = new SetupService(registry, mContainer, serverService, showController, pairingStore);
         mContainer.setSetupController(setupService);
 
         setupButton = findViewById(R.id.setupButton);
@@ -69,7 +79,9 @@ public class MainActivity extends AppCompatActivity {
         updateTempoDisplay();
 
         setupButton.setOnClickListener(v -> {
-            setupService.startSetup();
+            if (setupService.isAssigning()) setupService.confirmCurrent();
+            else setupService.startSetup();
+            setupButton.setText(setupService.getButtonLabel());
         });
 
         tempoPlusButton.setOnClickListener(v -> {

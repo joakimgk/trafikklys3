@@ -28,17 +28,31 @@ public class ClientRegistry {
         this.listener = listener;
     }
 
+    /** A unit remembered from an earlier session: listed (as offline) until it announces itself. */
+    public synchronized Client addKnown(String clientID) {
+        Client client = clients.get(clientID);
+        if (client != null) return client;
+
+        client = new Client(ID++, clientID, null);
+        client.markOffline();
+        clients.put(clientID, client);
+        if (listener != null) listener.onClientAdded(client);
+        return client;
+    }
+
     public synchronized Client onAnnounce(String clientID, InetAddress addr, boolean hasProgram) {
         Client client = clients.get(clientID);
         boolean isNew = false;
         boolean addressChanged = false;
+
+        if (client != null) client.touch();
 
         if (client == null) {
             isNew = true;
             client = new Client(ID++, clientID, addr);
             clients.put(clientID, client);
         } else {
-            addressChanged = !addr.equals(client.getAddress());
+            addressChanged = !addr.equals(client.getAddress());  // also true for a remembered unit
             client.setAddress(addr);
         }
 
@@ -52,11 +66,26 @@ public class ClientRegistry {
         return client;
     }
 
-    public Collection<Client> getClients() {
-        return clients.values();
+    // A copy, since the receiver thread adds units while the UI iterates
+    public synchronized Collection<Client> getClients() {
+        return new ArrayList<>(clients.values());
     }
 
-    public boolean noClients() { return clients.values().isEmpty(); }
+    /** Heartbeat from a unit. Old firmware sends no id, so fall back to the sender's address. */
+    public synchronized void onHeartbeat(String clientID, InetAddress addr) {
+        Client client = clientID != null ? clients.get(clientID) : null;
+        if (client == null) {
+            for (Client c : clients.values()) {
+                if (addr.equals(c.getAddress())) {
+                    client = c;
+                    break;
+                }
+            }
+        }
+        if (client != null) client.touch();
+    }
+
+    public synchronized boolean noClients() { return clients.isEmpty(); }
 
     public static ArrayList<Client> verticalGroup = new ArrayList<Client>();
 

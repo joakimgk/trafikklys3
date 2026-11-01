@@ -1,6 +1,7 @@
 package com.example.trafikklys3.network;
 
 import static com.example.trafikklys3.network.EspProtocol.CMD_DISCOVER;
+import static com.example.trafikklys3.network.EspProtocol.CMD_HEARTBEAT;
 import static com.example.trafikklys3.network.EspProtocol.CMD_IDENTIFY;
 
 import android.util.Log;
@@ -39,11 +40,7 @@ public class EspDecoder {
             case CMD_DISCOVER: {  // CMD_ANNOUNCE
                 if (payload.length < 4) return;
 
-                int espId =
-                        ((payload[0] & 0xFF) << 24) |
-                                ((payload[1] & 0xFF) << 16) |
-                                ((payload[2] & 0xFF) << 8) |
-                                (payload[3] & 0xFF);
+                int espId = readId(payload);
 
                 Log.d(TAG,
                         "ESP announce id=" + espId +
@@ -57,6 +54,11 @@ public class EspDecoder {
                 break;
             }
 
+            case CMD_HEARTBEAT: {
+                registry.onHeartbeat(payload.length >= 4 ? readId(payload) + "" : null, from);
+                break;
+            }
+
             /*
             case CMD_IDENTIFY:
 
@@ -66,5 +68,12 @@ public class EspDecoder {
 
              */
         }
+    }
+
+    private static int readId(byte[] payload) {
+        return ((payload[0] & 0xFF) << 24) |
+                ((payload[1] & 0xFF) << 16) |
+                ((payload[2] & 0xFF) << 8) |
+                (payload[3] & 0xFF);
     }
 }

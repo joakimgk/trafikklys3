@@ -135,13 +135,14 @@ public class TrafficLightContainer extends FrameLayout
         this.setupService = setupService;
     }
 
-    public void  addCell()
+    public TrafficLight addCell()
     {
         TrafficLight newLight = new TrafficLight(getContext(), newPosX );
         newLight.setListener(setupService);
         lights.add(newLight);
         newPosX += cellPixelSize;
         addView( newLight );
+        return newLight;
     }
 
     public List<TrafficLight> getLights() {

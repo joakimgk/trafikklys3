@@ -19,6 +19,7 @@ public final class EspProtocol {
 
     // ---- Command codes (App -> ESP) ----
     public static final byte CMD_DISCOVER = 0x77;
+    public static final byte CMD_HEARTBEAT = 0x66;
 
     public static final byte CMD_TEMPO    = 0x01;
     public static final byte CMD_RESET    = 0x02;

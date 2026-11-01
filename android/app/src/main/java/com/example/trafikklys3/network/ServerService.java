@@ -2,12 +2,14 @@ package com.example.trafikklys3.network;
 
 import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
 import static com.example.trafikklys3.network.EspProtocol.CMD_SWAP;
+import static com.example.trafikklys3.network.EspProtocol.CMD_SYNC;
 import static com.example.trafikklys3.network.EspProtocol.buildCommand;
 
 import android.content.Context;
 import android.net.wifi.WifiManager;
 import android.util.Log;
 
+import com.example.trafikklys3.controller.ShowClock;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
@@ -51,14 +53,16 @@ public class ServerService implements NetworkSender {
     private ScheduledExecutorService discoveryScheduler, retransmitScheduler, syncScheduler;
 
     private ClientRegistry registry;
+    private final ShowClock clock;
     private EspProtocol protocolHandler;
     private ExecutorService sendExecutor;
 
 
 
 
-    public ServerService(Context context, ClientRegistry registry) {
+    public ServerService(Context context, ClientRegistry registry, ShowClock clock) {
         this.context = context;
+        this.clock = clock;
 
         // ---- Client Registry ----
         this.registry = registry;
@@ -156,8 +160,36 @@ public class ServerService implements NetworkSender {
         syncScheduler = Executors.newSingleThreadScheduledExecutor();
         syncScheduler.scheduleAtFixedRate(
                 new SyncTask(this),
-                0, 1, TimeUnit.SECONDS
+                0, 500, TimeUnit.MILLISECONDS
         );
+    }
+
+    // One broadcast reaches every unit at the same moment, which keeps the units in step with
+    // each other. The packet is built when it is actually sent, so the phase in it is fresh.
+    public void sendSync() {
+        if (registry.noClients() || sendExecutor == null) return;
+        try {
+            sendExecutor.execute(() -> {
+                ShowClock.Sample s = clock.sample();
+                byte[] payload = new byte[] {
+                        (byte) s.tempo,
+                        (byte) (s.step >> 24), (byte) (s.step >> 16), (byte) (s.step >> 8), (byte) s.step,
+                        (byte) (s.phase >> 8), (byte) s.phase
+                };
+                send(buildCommand(CMD_SYNC, payload), broadcastAddr);
+            });
+        } catch (RuntimeException e) {
+            Log.w(TAG, "sync not sent: " + e);
+        }
+    }
+
+    // Extra beacons right after a swap or tempo change, so the units lock to the new timeline fast
+    @Override
+    public void syncBurst() {
+        if (retransmitScheduler == null) return;
+        for (long delay : new long[] {100, 300, 700}) {
+            retransmitScheduler.schedule(this::sendSync, delay, TimeUnit.MILLISECONDS);
+        }
     }
 
     public void sendRepeated(
@@ -176,6 +208,7 @@ public class ServerService implements NetworkSender {
 
     @Override
     public void sendUnicast(Client client, byte[] packet) {
+        if (client.getAddress() == null) return;  // remembered unit that hasn't reported in
         // Unicast
         sendRepeated(packet, client.getAddress(), REPEAT_UNICAST, INTERVAL_UNICAST);
         /*

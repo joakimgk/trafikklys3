@@ -5,6 +5,8 @@ import static com.example.trafikklys3.network.EspProtocol.CMD_PROGRAM;
 import static com.example.trafikklys3.network.EspProtocol.CMD_READY;
 import static com.example.trafikklys3.network.EspProtocol.CMD_SWAP;
 
+import android.os.SystemClock;
+
 import com.example.trafikklys3.network.EspProtocol;
 import com.example.trafikklys3.network.ServerService;
 import com.example.trafikklys3.ui.TrafficLight;
@@ -25,6 +27,11 @@ public class Client {
 
     boolean active = false;
 
+    // Units send a heartbeat every 3 s; two missed ones and they count as offline
+    private static final long ONLINE_WINDOW_MS = 8000;
+
+    private volatile long lastSeen = SystemClock.elapsedRealtime();
+
     public Client (int id, String cid, InetAddress addr) {
         this.ID = id;
         this.clientID = cid;
@@ -32,6 +39,20 @@ public class Client {
         //rotation = ID % 2 == 0 ? 90 : 0;
         this.created = new Timestamp(System.currentTimeMillis());
         mTrafficLight = null; // not mapped up in UX yet!
+    }
+
+    /** Any packet from the unit counts as a sign of life. */
+    public void touch() {
+        lastSeen = SystemClock.elapsedRealtime();
+    }
+
+    public boolean isOnline() {
+        return SystemClock.elapsedRealtime() - lastSeen < ONLINE_WINDOW_MS;
+    }
+
+    /** A remembered unit that hasn't reported in yet. */
+    public void markOffline() {
+        lastSeen = 0;
     }
 
     public InetAddress getAddress() {
