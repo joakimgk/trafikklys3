@@ -5,14 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ce7e27fd-435d-4958-8a9a-cc53d90c54df" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/buffer_addon_board.PNG" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/buffer_addon_schematic.PNG" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_board.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_bottom.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_schematic.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_test_bottom.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_test_top.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/controller_top.jpg" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/controller/ShowController.java" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/controller/ShowController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/model/ClientRegistry.java" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/model/ClientRegistry.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/network/EspDecoder.java" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/network/EspDecoder.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/network/ServerService.java" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/network/ServerService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/ui/MainActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/java/com/example/trafikklys3/ui/MainActivity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/res/values/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/res/values/strings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/trafikklys_ESP01_2026.ino" beforeDir="false" afterPath="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026/trafikklys_ESP01_2026.ino" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,6 +37,11 @@
     &quot;last_opened_file_path&quot;: &quot;/Users/joakim.grahl/AndroidStudioProjects/trafikklys3&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/esp8266/trafikklys_ESP01_2026" />
+    </key>
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
