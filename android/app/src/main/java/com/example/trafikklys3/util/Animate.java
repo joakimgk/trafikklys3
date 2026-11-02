@@ -27,7 +27,7 @@ public class Animate {
     private static void mergePrograms(ArrayList<Program> into, ArrayList<Program> other) {
         for (Program p : other) {
             for (Program u : into) {
-                if (u.mClient.clientID == p.mClient.clientID) {
+                if (u.mClient.clientID.equals(p.mClient.clientID)) {
                     u.mProgram = concat(u.mProgram, p.mProgram);
                 }
             }

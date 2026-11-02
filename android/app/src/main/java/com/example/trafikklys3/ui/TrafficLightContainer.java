@@ -9,7 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.example.trafikklys3.network.SetupService;
+import com.example.trafikklys3.controller.TrafficLightListener;
 import com.example.trafikklys3.util.DimenUtils;
 import com.example.trafikklys3.R;
 
@@ -28,9 +28,7 @@ public class TrafficLightContainer extends FrameLayout
 
     private final List<TrafficLight> lights = new ArrayList<>();
 
-    private SetupService setupService;
-
-    int newPosX = 0;
+    private TrafficLightListener listener;
 
     int horizntalCellCount = 10;
     int verticalCellCount = 10;
@@ -131,18 +129,45 @@ public class TrafficLightContainer extends FrameLayout
         }
     }
 
-    public void setSetupController(SetupService setupService) {
-        this.setupService = setupService;
+    public void setListener(TrafficLightListener listener) {
+        this.listener = listener;
     }
 
-    public TrafficLight addCell()
+    /** Adds a light with a known id and place (restored from storage). */
+    public TrafficLight addLight(int id, int x, int y, int orientation)
     {
-        TrafficLight newLight = new TrafficLight(getContext(), newPosX );
-        newLight.setListener(setupService);
-        lights.add(newLight);
-        newPosX += cellPixelSize;
-        addView( newLight );
-        return newLight;
+        TrafficLight light = new TrafficLight(getContext());
+        light.setLightId(id);
+        light.restore(x, y, orientation);
+        light.setListener(listener);
+        lights.add(light);
+        addView(light);
+        return light;
+    }
+
+    /** Adds a new, unassigned light in the first free spot. */
+    public TrafficLight addNewLight()
+    {
+        int id = 1;
+        for (TrafficLight l : lights) id = Math.max(id, l.getLightId() + 1);
+
+        int x = 0;
+        while (x < horizntalCellCount - 1 && isTaken(x)) x++;
+        return addLight(id, x, 1, 0);
+    }
+
+    private boolean isTaken(int x)
+    {
+        for (TrafficLight l : lights) {
+            if (l.cellX == x) return true;
+        }
+        return false;
+    }
+
+    public void removeLight(TrafficLight light)
+    {
+        lights.remove(light);
+        removeView(light);
     }
 
     public List<TrafficLight> getLights() {

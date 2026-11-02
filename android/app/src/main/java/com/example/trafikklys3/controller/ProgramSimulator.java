@@ -5,6 +5,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 
 import com.example.trafikklys3.model.Client;
+import com.example.trafikklys3.ui.TrafficLight;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,11 +58,6 @@ public class ProgramSimulator {
 
     private void show(Client c, Unit u, long step) {
         if (u.active == null || u.active.length == 0 || c.mTrafficLight == null) return;
-        if (!c.isOnline()) {
-            // nothing is blinking out there: keep the icon static
-            c.mTrafficLight.setLamps(ALL_ON);
-            return;
-        }
         c.mTrafficLight.setLamps(u.active[(int) Math.floorMod(step, (long) u.active.length)]);
     }
 
@@ -135,9 +131,10 @@ public class ProgramSimulator {
 
     /** Back to a static light for one unit. */
     public void clear(Client client) {
+        TrafficLight light = client.mTrafficLight;  // the light it is on right now
         handler.post(() -> {
-            Unit u = units.remove(client);
-            if (u != null && client.mTrafficLight != null) client.mTrafficLight.setLamps(ALL_ON);
+            units.remove(client);
+            if (light != null) light.setLamps(ALL_ON);
         });
     }
 

@@ -1,10 +1,9 @@
 package com.example.trafikklys3.network;
 
 import com.example.trafikklys3.controller.ShowController;
-import com.example.trafikklys3.controller.TrafficLightListener;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
-import com.example.trafikklys3.model.PairingStore;
+import com.example.trafikklys3.model.LightStore;
 import com.example.trafikklys3.model.Programs;
 import com.example.trafikklys3.model.SetupPhase;
 import com.example.trafikklys3.ui.TrafficLight;
@@ -12,26 +11,31 @@ import com.example.trafikklys3.ui.TrafficLightContainer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
- * Setup runs one unit at a time: the unit's lamps blink (on the real light and on its on-screen
- * icon), the user drags and rotates the icon to match where that light stands, and presses the
- * setup button to confirm. When the last unit is confirmed the show starts.
+ * Setup goes through the units that have no light yet, one at a time: the unit blinks (on the
+ * real light and on the icon it is tied to right now), the user picks the matching light on
+ * screen, moves or rotates it if needed, and presses the setup button to assign it.
+ * When the last unit is assigned the show starts.
  */
-public class SetupService implements TrafficLightListener {
+public class SetupService {
 
     private final ClientRegistry clientRegistry;
     private final TrafficLightContainer lightContainer;
-    private ServerService serverService;
-    private ShowController showController;
-    private final PairingStore pairingStore;
+    private final ServerService serverService;
+    private final ShowController showController;
+    private final LightStore lightStore;
+
+    private Supplier<TrafficLight> selection = () -> null;
+    private Consumer<TrafficLight> selector = light -> { };
 
     private List<Client> setupClients;
-    private List<TrafficLight> setupLights;
     private int currentIndex = -1;
 
     private Client currentClient;
-    private TrafficLight currentLight;
+    private TrafficLight previewLight;
 
     private SetupPhase phase = SetupPhase.IDLE;
 
@@ -39,60 +43,62 @@ public class SetupService implements TrafficLightListener {
                         TrafficLightContainer container,
                         ServerService serverService,
                         ShowController controller,
-                        PairingStore pairingStore) {
+                        LightStore lightStore) {
 
         this.clientRegistry = registry;
         this.lightContainer = container;
         this.serverService = serverService;
         this.showController = controller;
-        this.pairingStore = pairingStore;
+        this.lightStore = lightStore;
     }
 
-    public void startSetup() {
-        // Remembered units that are offline keep their icon and pairing
+    /** How setup reads and changes the light the user has picked on screen. */
+    public void setSelectionAccess(Supplier<TrafficLight> get, Consumer<TrafficLight> set) {
+        selection = get;
+        selector = set;
+    }
+
+    /** Returns null when setup started, otherwise the reason it didn't. */
+    public String startSetup() {
         setupClients = new ArrayList<>();
-        List<TrafficLight> offlineLights = new ArrayList<>();
         for (Client c : clientRegistry.getClients()) {
-            if (c.isOnline()) setupClients.add(c);
-            else if (c.mTrafficLight != null) offlineLights.add(c.mTrafficLight);
+            if (c.isOnline() && c.mTrafficLight == null) setupClients.add(c);
         }
-        setupLights = new ArrayList<>(lightContainer.getLights());
-        setupLights.removeAll(offlineLights);
+        if (setupClients.isEmpty()) {
+            return "Every unit already has a light. Remove a light to set its unit up again.";
+        }
 
-        if (setupClients.isEmpty() || setupLights.isEmpty()) return;
-
-        // Nothing runs while the units are being placed
+        // Nothing runs while the units are being set up: all the lamps go dark
         showController.stopShow();
         showController.setTempo(showController.getTempo());
-
-        for (Client c : setupClients) {
-            serverService.stopIdentify(c);
-            c.setTrafficLight(null);
-        }
-
-        // Every icon is "unassigned": dim and static
-        for (TrafficLight tl : setupLights) {
-            tl.setInactive();
-            tl.setLamps((byte) 0b111);
+        for (Client c : clientRegistry.getClients()) {
+            if (c.isOnline()) serverService.stopIdentify(c);
         }
 
         currentIndex = -1;
         currentClient = null;
-        currentLight = null;
+        previewLight = null;
         advanceToNextClient();
+        return null;
     }
 
-    /** The user has placed the icon for the blinking unit: pair them and move on. */
-    public void confirmCurrent() {
-        if (phase != SetupPhase.IDENTIFYING || currentClient == null) return;
+    /** The user has the right light picked for the blinking unit: assign it and move on. */
+    public String confirmCurrent() {
+        if (phase != SetupPhase.IDENTIFYING || currentClient == null) return null;
+
+        if (previewLight.getClient() != null) {
+            return "That light already has a unit. Pick a free light.";
+        }
 
         serverService.stopIdentify(currentClient);
         showController.stopPreview(currentClient);
 
-        currentLight.setActive();
-        pairingStore.save(currentClient);
+        previewLight.setClient(currentClient);
+        currentClient.setTrafficLight(previewLight);
+        lightStore.save(lightContainer.getLights());
 
         advanceToNextClient();
+        return null;
     }
 
     private void advanceToNextClient() {
@@ -101,40 +107,50 @@ public class SetupService implements TrafficLightListener {
         if (currentIndex >= setupClients.size()) {
             phase = SetupPhase.DONE;
             currentClient = null;
-            currentLight = null;
+            previewLight = null;
             showController.startShow();
             return;
         }
 
         currentClient = setupClients.get(currentIndex);
-        currentLight = firstUnassignedLight();
-        if (currentLight == null) {
-            // more units than icons: nothing left to place
-            phase = SetupPhase.DONE;
-            return;
+
+        TrafficLight light = selection.get();
+        if (light == null || light.getClient() != null) light = firstFreeLight();
+        if (light == null) {
+            // no free light on screen: make one
+            light = lightContainer.addNewLight();
+            lightStore.save(lightContainer.getLights());
         }
 
-        // The icon is bound right away so it can blink along with the unit
-        currentClient.setTrafficLight(currentLight);
-        currentLight.setWorking();
+        // The icon is tied to the unit right away so it can blink along with it
+        currentClient.setTrafficLight(light);
+        previewLight = light;
+        selector.accept(light);
 
         serverService.identify(currentClient);
         showController.preview(currentClient, Programs.IDENTIFY);
         phase = SetupPhase.IDENTIFYING;
     }
 
-    private TrafficLight firstUnassignedLight() {
-        for (TrafficLight tl : setupLights) {
-            if (!tl.isActive() && !isBound(tl)) return tl;
+    private TrafficLight firstFreeLight() {
+        for (TrafficLight l : lightContainer.getLights()) {
+            if (l.getClient() == null) return l;
         }
         return null;
     }
 
-    private boolean isBound(TrafficLight light) {
-        for (Client c : setupClients) {
-            if (c.mTrafficLight == light) return true;
-        }
-        return false;
+    /** The user tapped a light during setup. Returns false if it can't be used for this unit. */
+    public boolean onLightSelected(TrafficLight light) {
+        if (phase != SetupPhase.IDENTIFYING || currentClient == null) return true;
+        if (light.getClient() != null) return false;
+        if (light == previewLight) return true;
+
+        // move the blinking from the old icon to the new one
+        showController.stopPreview(currentClient);
+        currentClient.setTrafficLight(light);
+        previewLight = light;
+        showController.preview(currentClient, Programs.IDENTIFY);
+        return true;
     }
 
     public SetupPhase getPhase() {
@@ -149,19 +165,5 @@ public class SetupService implements TrafficLightListener {
         if (!isAssigning()) return "Setup";
         int n = currentIndex + 1;
         return (n == setupClients.size() ? "Finish " : "Next ") + n + "/" + setupClients.size();
-    }
-
-    @Override
-    public void onTrafficLightChanged(TrafficLight light) {
-        // Placement moved or rotated: remember it for the unit it belongs to
-        if (!light.isActive()) return;  // still being placed during setup
-        for (Client c : clientRegistry.getClients()) {
-            if (c.mTrafficLight == light) pairingStore.save(c);
-        }
-    }
-
-    @Override
-    public void onTrafficLightDragged(TrafficLight light, float dx, float dy) {
-
     }
 }

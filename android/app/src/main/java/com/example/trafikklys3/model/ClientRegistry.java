@@ -71,6 +71,10 @@ public class ClientRegistry {
         return new ArrayList<>(clients.values());
     }
 
+    public synchronized void remove(String clientID) {
+        clients.remove(clientID);
+    }
+
     /** Heartbeat from a unit. Old firmware sends no id, so fall back to the sender's address. */
     public synchronized void onHeartbeat(String clientID, InetAddress addr) {
         Client client = clientID != null ? clients.get(clientID) : null;

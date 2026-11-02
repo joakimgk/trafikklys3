@@ -22,6 +22,7 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -187,8 +188,12 @@ public class ServerService implements NetworkSender {
     @Override
     public void syncBurst() {
         if (retransmitScheduler == null) return;
-        for (long delay : new long[] {100, 300, 700}) {
-            retransmitScheduler.schedule(this::sendSync, delay, TimeUnit.MILLISECONDS);
+        try {
+            for (long delay : new long[] {100, 300, 700}) {
+                retransmitScheduler.schedule(this::sendSync, delay, TimeUnit.MILLISECONDS);
+            }
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "sync burst not sent, service is stopped");
         }
     }
 
@@ -199,10 +204,14 @@ public class ServerService implements NetworkSender {
             long intervalMs) {
 
         // One-shot sends: a fixed-rate task would keep firing after the last repeat
-        for (int i = 0; i < repeatCount; i++) {
-            retransmitScheduler.schedule(
-                    () -> sendExecutor.execute(() -> send(packet, addr)),
-                    i * intervalMs, TimeUnit.MILLISECONDS);
+        try {
+            for (int i = 0; i < repeatCount; i++) {
+                retransmitScheduler.schedule(
+                        () -> sendExecutor.execute(() -> send(packet, addr)),
+                        i * intervalMs, TimeUnit.MILLISECONDS);
+            }
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "not sent, service is stopped");
         }
     }
 

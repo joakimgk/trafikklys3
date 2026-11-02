@@ -1,72 +1,58 @@
 package com.example.trafikklys3.ui;
 
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 
 import androidx.annotation.Nullable;
 
 import com.example.trafikklys3.R;
 import com.example.trafikklys3.controller.TrafficLightListener;
+import com.example.trafikklys3.model.Client;
+import com.example.trafikklys3.model.LightStatus;
+import com.example.trafikklys3.util.DimenUtils;
 
 public class TrafficLight extends FrameLayout
 {
+    private static final float LAMP_ON = 1.0F;
+    private static final float LAMP_OFF = 0.2F;
+
     View mContent;
 
     public int cellX = 0;
     public int cellY = 0;
     private int mOrientation = 0;
-    private boolean active = false;
+
+    private int lightId;
+    private Client client;  // the unit that drives this light, if one is assigned
 
     private LinearLayout mLightContainer = null;
-    private boolean online = true;
+    private ImageView mStatusBadge;
+    private LightStatus status = null;
 
     private TrafficLightListener listener;
 
     public TrafficLight(Context context)
     {
         super(context);
-        init(context, null);
-    }
-
-    public TrafficLight(Context context, int x)
-    {
-        super(context);
-        cellX = x;
-        init(context, null);
-    }
-
-    public TrafficLight(Context context, int x, int orientation)
-    {
-        super(context);
-        cellX = x;
-        mOrientation = orientation;
-        init(context, null);
+        init(context);
     }
 
     public TrafficLight(Context context, @Nullable AttributeSet attrs)
     {
         super(context, attrs);
-        init(context, attrs);
+        init(context);
     }
 
-    public TrafficLight(Context context, @Nullable AttributeSet attrs, int defStyleAttr)
-    {
-        super(context, attrs, defStyleAttr);
-        init(context, attrs);
-    }
-
-    public TrafficLight(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes)
-    {
-        super(context, attrs, defStyleAttr, defStyleRes);
-        init(context, attrs);
-    }
-
-    private void init(Context context, @Nullable AttributeSet attrs)
+    private void init(Context context)
     {
         LayoutInflater inflater = ((LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE));
         mContent = inflater.inflate(R.layout.view_traffic_light, this, true);
@@ -74,40 +60,69 @@ public class TrafficLight extends FrameLayout
         // You could use the <merge> tag to avoid the extra viewgroup, but it nukes some attributes ( e.g. background )
         // from the xml, so easier to just keep it
         mLightContainer = mContent.findViewById(R.id.light_container);
-        if (!active) mLightContainer.setAlpha(0.4F);  // initially inactive
+
+        int badgeSize = (int) DimenUtils.calculatePixelFromDp(context, 20);
+        int badgeMargin = (int) DimenUtils.calculatePixelFromDp(context, 2);
+        mStatusBadge = new ImageView(context);
+        LayoutParams lp = new LayoutParams(badgeSize, badgeSize, Gravity.TOP | Gravity.END);
+        lp.setMargins(badgeMargin, badgeMargin, badgeMargin, badgeMargin);
+        addView(mStatusBadge, lp);
+        setStatus(LightStatus.UNASSIGNED);
     }
 
     public void setListener(TrafficLightListener listener) {
         this.listener = listener;
     }
 
-    public void setActive() {
-        mLightContainer.setAlpha(0.9F);  // active
-        active = true;
+    public int getLightId() {
+        return lightId;
     }
 
-    /** The light being placed for the unit that is blinking right now. */
-    public void setWorking() {
-        mLightContainer.setAlpha(0.75F);
+    public void setLightId(int id) {
+        lightId = id;
     }
 
-    /** A unit that has stopped reporting is shown dim. */
-    public void setOnline(boolean online) {
-        if (online == this.online) return;
-        this.online = online;
-        setAlpha(online ? 1F : 0.4F);
+    public Client getClient() {
+        return client;
     }
 
-    public boolean isActive() {
-        return active;
+    public void setClient(Client client) {
+        this.client = client;
     }
 
-    public void setInactive() {
-        mLightContainer.setAlpha(0.4F);  // active
-        active = false;
+    public void setStatus(LightStatus newStatus) {
+        if (newStatus == status) return;
+        status = newStatus;
+        switch (newStatus) {
+            case ONLINE:
+                mStatusBadge.setImageResource(R.drawable.ic_status_online);
+                break;
+            case OFFLINE:
+                mStatusBadge.setImageResource(R.drawable.ic_status_offline);
+                break;
+            default:
+                mStatusBadge.setImageResource(R.drawable.ic_status_unassigned);
+        }
     }
 
-    /** Sets position and orientation directly (no rotate-around-centre shift) and marks it paired. */
+    public LightStatus getStatus() {
+        return status;
+    }
+
+    /** Outline around the light the user has picked. */
+    public void setHighlighted(boolean highlighted) {
+        if (!highlighted) {
+            setForeground(null);
+            return;
+        }
+        GradientDrawable outline = new GradientDrawable();
+        outline.setColor(Color.TRANSPARENT);
+        outline.setStroke((int) DimenUtils.calculatePixelFromDp(getContext(), 3), Color.WHITE);
+        outline.setCornerRadius(DimenUtils.calculatePixelFromDp(getContext(), 6));
+        setForeground(outline);
+    }
+
+    /** Sets position and orientation directly (no rotate-around-centre shift). */
     public void restore(int x, int y, int orientation)
     {
         mOrientation = orientation;
@@ -115,12 +130,8 @@ public class TrafficLight extends FrameLayout
         mLightContainer.setRotation(orientation == 180 || orientation == 270 ? 180 : 0);
         cellX = x;
         cellY = y;
-        setActive();
         requestLayout();
     }
-
-    private static final float LAMP_ON = 1.0F;
-    private static final float LAMP_OFF = 0.2F;
 
     /** Shows a program step: bit 0 = red, bit 1 = yellow, bit 2 = green (as in Programs). */
     public void setLamps(byte bits)
@@ -208,15 +219,14 @@ public class TrafficLight extends FrameLayout
 
             case MotionEvent.ACTION_UP:
             {
-                // If up happens within 250ms of drag, and we haven't moved very far, treat as click and rotate thing
-                if ( ev.getEventTime() - ev.getDownTime() < clickThreshold &&
-                        Math.max( ev.getRawX() - dragStartRawX,  ev.getRawY() - dragStartRawY) < getMeasuredWidth() * 0.5f														)
+                // A short touch that hasn't gone far is a tap: pick this light
+                float moved = (float) Math.hypot(ev.getRawX() - dragStartRawX, ev.getRawY() - dragStartRawY);
+                if ( ev.getEventTime() - ev.getDownTime() < clickThreshold && moved < getMeasuredWidth() * 0.5f )
                 {
                     this.setTranslationX(0);
                     this.setTranslationY(0);
 
-                    rotate();    // rotato
-                    listener.onTrafficLightChanged(this);
+                    if (listener != null) listener.onTrafficLightSelected(this);
                 }
                 else if (mDragging)
                 {
@@ -237,7 +247,10 @@ public class TrafficLight extends FrameLayout
                     this.setTranslationY(0);
 
                     requestLayout();	// calls onLayout() in parent again
-                    if (listener != null) listener.onTrafficLightChanged(this);
+                    if (listener != null) {
+                        listener.onTrafficLightSelected(this);
+                        listener.onTrafficLightChanged(this);
+                    }
                 }
 
                 mDragging = false;

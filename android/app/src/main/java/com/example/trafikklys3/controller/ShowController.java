@@ -11,7 +11,7 @@ import android.util.Log;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientListener;
 import com.example.trafikklys3.model.ClientRegistry;
-import com.example.trafikklys3.model.PairingStore;
+import com.example.trafikklys3.model.LightStatus;
 import com.example.trafikklys3.model.Program;
 import com.example.trafikklys3.network.EspProtocol;
 import com.example.trafikklys3.network.NetworkSender;
@@ -30,31 +30,34 @@ public class ShowController implements ClientListener {
     private final TrafficLightContainer container;
 
     private ClientRegistry registry;
-    private final PairingStore pairingStore;
 
     private ArrayList<Program> currentProgram;
 
     private static final long AUTO_START_DELAY_MS = 3000;
 
-    private final Runnable autoStart = this::autoStartShow;
+    private final Runnable autoStart = this::startShow;
 
     private final Runnable presenceCheck = this::checkPresence;
+    private Runnable presenceListener;
 
     private final ShowClock clock;
     private final ProgramSimulator simulator;
 
     private int tempo = 60;
 
+    // Shows built for the placed units; the user picks one
+    private static final String[] SHOW_NAMES = {"Trail", "Wave", "Pendulum"};
+    private static final int MAX_PROGRAM_LENGTH = 255;  // what fits in one packet
+    private int showIndex = 0;
+
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     public ShowController(NetworkSender network,
                           TrafficLightContainer trafficLightContainer,
                           ClientRegistry registry,
-                          PairingStore pairingStore,
                           ShowClock clock) {
         this.clock = clock;
         this.simulator = new ProgramSimulator(clock);
-        this.pairingStore = pairingStore;
         this.network = network;
         this.container = trafficLightContainer;
         this.registry = registry;
@@ -71,6 +74,12 @@ public class ShowController implements ClientListener {
         Log.d("ShowController", "stop()");
         simulator.stop();
         uiHandler.removeCallbacks(presenceCheck);
+        uiHandler.removeCallbacks(autoStart);  // the network is shut down while the app is stopped
+    }
+
+    /** Called after every status refresh (once a second), on the UI thread. */
+    public void setPresenceListener(Runnable listener) {
+        presenceListener = listener;
     }
 
     public int getTempo() {
@@ -85,12 +94,6 @@ public class ShowController implements ClientListener {
         byte[] payload = new byte[] { (byte) (tempo & 0xFF) };
         network.sendToAll(EspProtocol.buildCommand(CMD_TEMPO, payload));
         network.syncBurst();
-        //network.sendBroadcast(EspProtocol.buildCommand(CMD_TEMPO, payload));
-    }
-
-    public void transmitProgram(byte[] program) {
-        network.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, program));
-        simulator.stageAll(registry.getClients(), program);
     }
 
     public void transmitProgram(ArrayList<Program> program) {
@@ -101,10 +104,108 @@ public class ShowController implements ClientListener {
         }
     }
 
+    /** Rebuild the current show from the layout as it is now, and start it over. */
     public void resetProgram() {
+        startShow();
+    }
+
+    // Units found by the network. Lights are placed by the user, so nothing to draw here.
+    @Override
+    public void onClientAdded(Client client) {
+        Log.v(TAG, "onClientAdded clientID = " + client.clientID);
+    }
+
+    @Override
+    public void onClientUpdated(Client client) {
+        Log.v(TAG, "onClientUpdated clientID = " + client.clientID);
+        if (currentProgram == null) return;
+        for (Program p : currentProgram) {
+            if (p.mClient.clientID.equals(client.clientID)) {
+                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));
+                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_SWAP));
+                simulator.stage(p.mClient, p.mProgram);
+                simulator.swap(p.mClient);
+            }
+        }
+    }
+
+    public void startShow() {
+        registry.updateGroups();
+
+        // Every light on screen takes part. One without a unit gets a stand-in that only
+        // exists on screen, so a layout can be tried out before any unit is assigned.
+        ArrayList<Client> clients = new ArrayList<>();
+        for (TrafficLight light : container.getLights()) {
+            Client c = light.getClient();
+            if (c == null) c = standIn(light);
+            clients.add(c);
+        }
+        if (clients.isEmpty()) return;
+
+        simulator.stopAll();  // forget the previous show, including old stand-ins
+
+        ArrayList<Program> program = buildShow(clients);
+        if (tooLong(program)) {
+            Log.w(TAG, SHOW_NAMES[showIndex] + " is too long for this many units, using Trail");
+            showIndex = 0;
+            program = buildShow(clients);
+        }
+
+        // make sure the units run at the tempo the app shows
+        setTempo(tempo);
+        transmitProgram(program);
+
         network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
         simulator.swapAll();
         network.syncBurst();
+    }
+
+    private Client standIn(TrafficLight light) {
+        Client c = new Client(-light.getLightId(), "light-" + light.getLightId(), null);
+        c.mTrafficLight = light;
+        return c;
+    }
+
+    public String getShowName() {
+        return SHOW_NAMES[showIndex];
+    }
+
+    public String[] getShowNames() {
+        return SHOW_NAMES.clone();
+    }
+
+    public int getShowIndex() {
+        return showIndex;
+    }
+
+    /** Switch to a show and start it right away. */
+    public void selectShow(int index) {
+        showIndex = Math.floorMod(index, SHOW_NAMES.length);
+        startShow();
+    }
+
+    public void nextShow() {
+        selectShow(showIndex + 1);
+    }
+
+    // Each builder sorts the list it is given, so hand it a copy
+    private ArrayList<Program> buildShow(ArrayList<Client> clients) {
+        ArrayList<Client> copy = new ArrayList<>(clients);
+        switch (showIndex) {
+            case 1:
+                return Animate.Wave(copy);
+            case 2:
+                return Animate.Pendulum(copy);
+            default:
+                return Animate.Trail(copy);
+        }
+    }
+
+    private boolean tooLong(ArrayList<Program> program) {
+        for (Program p : program) {
+            if (p.mProgram.length > MAX_PROGRAM_LENGTH) return true;
+        }
+        return false;
     }
 
     /** Back to the idle state used during setup: nothing animated, nothing resent to the units. */
@@ -124,72 +225,48 @@ public class ShowController implements ClientListener {
         simulator.clear(client);
     }
 
-    private void checkPresence() {
+    /** The app doesn't know what the units run after a restart: start the show once they had time to report in. */
+    public void scheduleAutoStart() {
+        uiHandler.removeCallbacks(autoStart);
+        uiHandler.postDelayed(autoStart, AUTO_START_DELAY_MS);
+    }
+
+    /** Back in the app with a show that never got started: start it. */
+    public void resumeAutoStart() {
+        if (currentProgram != null) return;
         for (Client c : registry.getClients()) {
             if (c.mTrafficLight != null) {
-                c.mTrafficLight.setOnline(c.isOnline());
+                scheduleAutoStart();
+                return;
             }
         }
+    }
+
+    /** Is any unit reporting in right now? */
+    public boolean hasOnlineUnit() {
+        for (Client c : registry.getClients()) {
+            if (c.isOnline()) return true;
+        }
+        return false;
+    }
+
+    private void checkPresence() {
+        // A unit that is online but has no light yet is "available" to every unassigned light
+        boolean freeUnit = false;
+        for (Client c : registry.getClients()) {
+            if (c.mTrafficLight == null && c.isOnline()) freeUnit = true;
+        }
+
+        for (TrafficLight light : container.getLights()) {
+            Client c = light.getClient();
+            if (c == null) {
+                light.setStatus(freeUnit ? LightStatus.ONLINE : LightStatus.UNASSIGNED);
+            } else {
+                light.setStatus(c.isOnline() ? LightStatus.ONLINE : LightStatus.OFFLINE);
+            }
+        }
+
+        if (presenceListener != null) presenceListener.run();
         uiHandler.postDelayed(presenceCheck, 1000);
-    }
-
-    // After an app restart: only start once every known unit is placed on screen
-    private void autoStartShow() {
-        for (Client c : registry.getClients()) {
-            if (c.mTrafficLight == null) return;
-        }
-        startShow();
-    }
-
-    @Override
-    public void onClientAdded(Client client) {
-        uiHandler.post(() -> {
-            TrafficLight light = container.addCell();
-            // Known unit: put it back where it was, already paired
-            if (pairingStore.restore(client, light)) {
-                // The app doesn't know what the units are running after a restart:
-                // (re)start the show once the known units have had time to report in
-                uiHandler.removeCallbacks(autoStart);
-                uiHandler.postDelayed(autoStart, AUTO_START_DELAY_MS);
-            }
-            light.setOnline(client.isOnline());
-            container.invalidate();
-        });
-    }
-
-    @Override
-    public void onClientUpdated(Client client) {
-        Log.v(TAG, "onClientUpdated clientID = " + client.clientID);
-        if (currentProgram == null) return;
-        for (Program p : currentProgram) {
-            if (p.mClient.clientID.equals(client.clientID)) {
-                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));
-                network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_SWAP));
-                simulator.stage(p.mClient, p.mProgram);
-                simulator.swap(p.mClient);
-            }
-        }
-    }
-
-    public void startShow() {
-        registry.updateGroups();
-        ArrayList<Client> clients = new ArrayList<>();
-        for (Client c : registry.getClients()) {
-            if (c.mTrafficLight != null) clients.add(c);  // only units placed on screen
-        }
-        if (clients.isEmpty()) return;
-        //transmitProgram(Animate.Trail());
-        //transmitProgram(Animate.Wave());
-        //transmitProgram(Animate.Sink());
-        //transmitProgram(Animate.Pendulum());
-
-        //ArrayList<Program> p = Animate.Trail();
-        // make sure the units run at the tempo the app shows
-        setTempo(tempo);
-        transmitProgram(Animate.Trail(clients));
-
-        network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
-        simulator.swapAll();
-        network.syncBurst();
     }
 }
