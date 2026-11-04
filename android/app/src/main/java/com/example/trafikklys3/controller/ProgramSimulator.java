@@ -23,7 +23,7 @@ public class ProgramSimulator {
     // The lamps change this long after the app's clock (WiFi + AP + firmware loop); tune by eye
     private static final long LAMP_DELAY_NS = 25_000_000L;
 
-    private static final byte ALL_ON = 0b111;
+    private static final byte ALL_OFF = 0;  // idle: every lamp dim
 
     private static class Unit {
         byte[] pending;
@@ -134,7 +134,7 @@ public class ProgramSimulator {
         TrafficLight light = client.mTrafficLight;  // the light it is on right now
         handler.post(() -> {
             units.remove(client);
-            if (light != null) light.setLamps(ALL_ON);
+            if (light != null) light.setLamps(ALL_OFF);
         });
     }
 
@@ -143,7 +143,7 @@ public class ProgramSimulator {
             handler.removeCallbacks(tick);
             running = false;
             for (Map.Entry<Client, Unit> e : units.entrySet()) {
-                if (e.getKey().mTrafficLight != null) e.getKey().mTrafficLight.setLamps(ALL_ON);
+                if (e.getKey().mTrafficLight != null) e.getKey().mTrafficLight.setLamps(ALL_OFF);
             }
             units.clear();
         });

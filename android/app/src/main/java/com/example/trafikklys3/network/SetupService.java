@@ -15,10 +15,10 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Setup goes through the units that have no light yet, one at a time: the unit blinks (on the
- * real light and on the icon it is tied to right now), the user picks the matching light on
- * screen, moves or rotates it if needed, and presses the setup button to assign it.
- * When the last unit is assigned the show starts.
+ * Setup goes through the online units one at a time: the unit blinks (on the real light and on
+ * its icon), the user drags and rotates the icon to match where that light stands, and presses
+ * the setup button to confirm. A unit that has no light yet is tied to the light the user picks.
+ * When the last unit is done the show starts.
  */
 public class SetupService {
 
@@ -62,10 +62,10 @@ public class SetupService {
     public String startSetup() {
         setupClients = new ArrayList<>();
         for (Client c : clientRegistry.getClients()) {
-            if (c.isOnline() && c.mTrafficLight == null) setupClients.add(c);
+            if (c.isOnline()) setupClients.add(c);
         }
         if (setupClients.isEmpty()) {
-            return "Every unit already has a light. Remove a light to set its unit up again.";
+            return "No unit found yet.";
         }
 
         // Nothing runs while the units are being set up: all the lamps go dark
@@ -86,7 +86,8 @@ public class SetupService {
     public String confirmCurrent() {
         if (phase != SetupPhase.IDENTIFYING || currentClient == null) return null;
 
-        if (previewLight.getClient() != null) {
+        Client owner = previewLight.getClient();
+        if (owner != null && owner != currentClient) {
             return "That light already has a unit. Pick a free light.";
         }
 
@@ -114,8 +115,12 @@ public class SetupService {
 
         currentClient = setupClients.get(currentIndex);
 
-        TrafficLight light = selection.get();
-        if (light == null || light.getClient() != null) light = firstFreeLight();
+        // A unit that already has a light keeps it: the user only places it. Otherwise pick one.
+        TrafficLight light = ownLight(currentClient);
+        if (light == null) {
+            light = selection.get();
+            if (light == null || light.getClient() != null) light = firstFreeLight();
+        }
         if (light == null) {
             // no free light on screen: make one
             light = lightContainer.addNewLight();
@@ -132,6 +137,11 @@ public class SetupService {
         phase = SetupPhase.IDENTIFYING;
     }
 
+    private TrafficLight ownLight(Client client) {
+        TrafficLight light = client.mTrafficLight;
+        return light != null && light.getClient() == client ? light : null;
+    }
+
     private TrafficLight firstFreeLight() {
         for (TrafficLight l : lightContainer.getLights()) {
             if (l.getClient() == null) return l;
@@ -139,18 +149,25 @@ public class SetupService {
         return null;
     }
 
-    /** The user tapped a light during setup. Returns false if it can't be used for this unit. */
-    public boolean onLightSelected(TrafficLight light) {
-        if (phase != SetupPhase.IDENTIFYING || currentClient == null) return true;
-        if (light.getClient() != null) return false;
-        if (light == previewLight) return true;
+    /** The user tapped a light during setup. Returns why it can't be used, or null if it can. */
+    public String onLightSelected(TrafficLight light) {
+        if (phase != SetupPhase.IDENTIFYING || currentClient == null) return null;
+
+        TrafficLight own = ownLight(currentClient);
+        if (own != null) {
+            return light == own ? null
+                    : "This unit belongs to light " + own.getLightId() + ". Drag that light into place.";
+        }
+
+        if (light.getClient() != null) return "That light already has a unit. Pick a free light.";
+        if (light == previewLight) return null;
 
         // move the blinking from the old icon to the new one
         showController.stopPreview(currentClient);
         currentClient.setTrafficLight(light);
         previewLight = light;
         showController.preview(currentClient, Programs.IDENTIFY);
-        return true;
+        return null;
     }
 
     public SetupPhase getPhase() {

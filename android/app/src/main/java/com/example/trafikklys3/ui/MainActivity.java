@@ -25,6 +25,7 @@ import com.example.trafikklys3.network.ServerService;
 import com.example.trafikklys3.network.SetupService;
 
 import java.net.SocketException;
+import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity implements TrafficLightListener {
 
@@ -72,6 +73,7 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
         mContainer.setListener(this);
         loadLights();
+        showController.setUnitListener(this::onUnitFound);
 
         setupService = new SetupService(registry, mContainer, serverService, showController, lightStore);
         setupService.setSelectionAccess(() -> selected, this::select);
@@ -125,7 +127,7 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
         stopButton.setOnClickListener(v -> {
             if (setupService.isAssigning()) return;
-            showController.stopShow();
+            showController.stopProgram();
         });
 
         rotateButton.setOnClickListener(v -> {
@@ -153,17 +155,28 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
     // Lights saved from an earlier session come back in place; the ones with a unit start offline
     private void loadLights() {
-        boolean anyAssigned = false;
         for (LightStore.Record r : lightStore.load()) {
             TrafficLight light = mContainer.addLight(r.id, r.x, r.y, r.orientation);
             if (r.clientId != null) {
                 Client client = registry.addKnown(r.clientId);
                 client.setTrafficLight(light);
                 light.setClient(client);
-                anyAssigned = true;
             }
         }
-        if (anyAssigned) showController.scheduleAutoStart();
+    }
+
+    // A unit that has no light gets one, unless the user has free lights waiting for Setup
+    private void onUnitFound(Client client) {
+        if (client.mTrafficLight != null) return;
+        if (setupService.isAssigning()) return;
+        for (TrafficLight l : mContainer.getLights()) {
+            if (l.getClient() == null) return;
+        }
+
+        TrafficLight light = mContainer.addNewLight();
+        light.setClient(client);
+        client.setTrafficLight(light);
+        lightStore.save(mContainer.getLights());
     }
 
     @Override
@@ -180,6 +193,10 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             select(light);
             return true;
         }
+        if (item.getItemId() == R.id.action_remove_all) {
+            confirmRemoveAll();
+            return true;
+        }
         return super.onOptionsItemSelected(item);
     }
 
@@ -187,10 +204,12 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
     @Override
     public void onTrafficLightSelected(TrafficLight light) {
-        if (setupService.isAssigning() && !setupService.onLightSelected(light)) {
-            Toast.makeText(this, "That light already has a unit. Pick a free light.",
-                    Toast.LENGTH_SHORT).show();
-            return;
+        if (setupService.isAssigning()) {
+            String problem = setupService.onLightSelected(light);
+            if (problem != null) {
+                Toast.makeText(this, problem, Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
         select(light);
     }
@@ -243,6 +262,28 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
                 .setPositiveButton("Remove", (d, w) -> removeLight(light))
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void confirmRemoveAll() {
+        if (setupService.isAssigning()) {
+            Toast.makeText(this, "Finish setup first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (mContainer.getLights().isEmpty()) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Remove all lights?")
+                .setMessage("Every light is removed and the units become free. You start from an empty screen.")
+                .setPositiveButton("Remove all", (d, w) -> removeAll())
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void removeAll() {
+        showController.stopShow();
+        for (TrafficLight light : new ArrayList<>(mContainer.getLights())) {
+            removeLight(light);
+        }
     }
 
     private void removeLight(TrafficLight light) {
@@ -308,12 +349,12 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             throw new RuntimeException(e);
         }
         showController.start();
-        if (!setupService.isAssigning()) showController.resumeAutoStart();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        lightStore.touch();
         if (serverService != null) {
             serverService.stop();
         }

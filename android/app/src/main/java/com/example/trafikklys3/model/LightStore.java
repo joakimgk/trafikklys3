@@ -18,6 +18,10 @@ public class LightStore {
     private static final String PREFS = "lights";
     private static final String OLD_PREFS = "pairing";  // one "x,y,orientation" entry per unit
     private static final String KEY = "all";
+    private static final String KEY_TIME = "savedAt";
+
+    // A setup older than this (since the app was last used) is forgotten
+    private static final long MAX_AGE_MS = 10L * 60 * 60 * 1000;
 
     public static class Record {
         public final int id;
@@ -54,13 +58,30 @@ public class LightStore {
                     .append(c != null ? c.clientID : "")
                     .append('\n');
         }
-        prefs.edit().putString(KEY, sb.toString()).apply();
+        prefs.edit().putString(KEY, sb.toString()).putLong(KEY_TIME, System.currentTimeMillis()).apply();
+    }
+
+    /** The setup is still in use: restart its 10 hours. */
+    public void touch() {
+        if (prefs.contains(KEY)) prefs.edit().putLong(KEY_TIME, System.currentTimeMillis()).apply();
+    }
+
+    /** Forget every light. */
+    public void clear() {
+        prefs.edit().putString(KEY, "").putLong(KEY_TIME, System.currentTimeMillis()).apply();
     }
 
     public List<Record> load() {
         List<Record> out = new ArrayList<>();
         String saved = prefs.getString(KEY, null);
         if (saved == null) return migrateOld();
+
+        // data saved before the timestamp existed counts as just saved
+        long now = System.currentTimeMillis();
+        if (now - prefs.getLong(KEY_TIME, now) > MAX_AGE_MS) {
+            clear();
+            return out;
+        }
 
         for (String line : saved.split("\n")) {
             String[] p = line.split(",", -1);

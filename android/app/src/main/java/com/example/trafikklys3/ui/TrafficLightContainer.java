@@ -164,6 +164,11 @@ public class TrafficLightContainer extends FrameLayout
         return false;
     }
 
+    public void removeAllLights()
+    {
+        for (TrafficLight l : new ArrayList<>(lights)) removeLight(l);
+    }
+
     public void removeLight(TrafficLight light)
     {
         lights.remove(light);

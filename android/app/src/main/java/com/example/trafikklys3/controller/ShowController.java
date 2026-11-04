@@ -13,6 +13,7 @@ import com.example.trafikklys3.model.ClientListener;
 import com.example.trafikklys3.model.ClientRegistry;
 import com.example.trafikklys3.model.LightStatus;
 import com.example.trafikklys3.model.Program;
+import com.example.trafikklys3.model.Programs;
 import com.example.trafikklys3.network.EspProtocol;
 import com.example.trafikklys3.network.NetworkSender;
 import com.example.trafikklys3.ui.TrafficLight;
@@ -20,6 +21,7 @@ import com.example.trafikklys3.ui.TrafficLightContainer;
 import com.example.trafikklys3.util.Animate;
 
 import java.util.ArrayList;
+import java.util.function.Consumer;
 
 public class ShowController implements ClientListener {
 
@@ -33,12 +35,9 @@ public class ShowController implements ClientListener {
 
     private ArrayList<Program> currentProgram;
 
-    private static final long AUTO_START_DELAY_MS = 3000;
-
-    private final Runnable autoStart = this::startShow;
-
     private final Runnable presenceCheck = this::checkPresence;
     private Runnable presenceListener;
+    private Consumer<Client> unitListener;
 
     private final ShowClock clock;
     private final ProgramSimulator simulator;
@@ -74,7 +73,17 @@ public class ShowController implements ClientListener {
         Log.d("ShowController", "stop()");
         simulator.stop();
         uiHandler.removeCallbacks(presenceCheck);
-        uiHandler.removeCallbacks(autoStart);  // the network is shut down while the app is stopped
+    }
+
+    /** Called (on the UI thread) when a unit announces itself as new, or has just been powered on. */
+    public void setUnitListener(Consumer<Client> listener) {
+        unitListener = listener;
+    }
+
+    private void notifyUnit(Client client) {
+        uiHandler.post(() -> {
+            if (unitListener != null) unitListener.accept(client);
+        });
     }
 
     /** Called after every status refresh (once a second), on the UI thread. */
@@ -113,11 +122,13 @@ public class ShowController implements ClientListener {
     @Override
     public void onClientAdded(Client client) {
         Log.v(TAG, "onClientAdded clientID = " + client.clientID);
+        notifyUnit(client);
     }
 
     @Override
     public void onClientUpdated(Client client) {
         Log.v(TAG, "onClientUpdated clientID = " + client.clientID);
+        notifyUnit(client);  // a unit that was just powered on needs a light too
         if (currentProgram == null) return;
         for (Program p : currentProgram) {
             if (p.mClient.clientID.equals(client.clientID)) {
@@ -208,9 +219,15 @@ public class ShowController implements ClientListener {
         return false;
     }
 
+    /** Stop the show on screen and on every unit: the lamps go dark. */
+    public void stopProgram() {
+        stopShow();
+        network.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, new byte[] { Programs.NON }));
+        network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
+    }
+
     /** Back to the idle state used during setup: nothing animated, nothing resent to the units. */
     public void stopShow() {
-        uiHandler.removeCallbacks(autoStart);
         currentProgram = null;
         simulator.stopAll();
     }
@@ -223,23 +240,6 @@ public class ShowController implements ClientListener {
 
     public void stopPreview(Client client) {
         simulator.clear(client);
-    }
-
-    /** The app doesn't know what the units run after a restart: start the show once they had time to report in. */
-    public void scheduleAutoStart() {
-        uiHandler.removeCallbacks(autoStart);
-        uiHandler.postDelayed(autoStart, AUTO_START_DELAY_MS);
-    }
-
-    /** Back in the app with a show that never got started: start it. */
-    public void resumeAutoStart() {
-        if (currentProgram != null) return;
-        for (Client c : registry.getClients()) {
-            if (c.mTrafficLight != null) {
-                scheduleAutoStart();
-                return;
-            }
-        }
     }
 
     /** Is any unit reporting in right now? */

@@ -68,6 +68,7 @@ public class TrafficLight extends FrameLayout
         lp.setMargins(badgeMargin, badgeMargin, badgeMargin, badgeMargin);
         addView(mStatusBadge, lp);
         setStatus(LightStatus.UNASSIGNED);
+        setLamps((byte) 0);  // nothing runs yet: every lamp dim
     }
 
     public void setListener(TrafficLightListener listener) {
