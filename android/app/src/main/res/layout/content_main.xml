@@ -69,20 +69,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="Program"
-        app:layout_constraintEnd_toStartOf="@+id/resetProgram"
+        app:layout_constraintEnd_toStartOf="@+id/stopButton"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/setupButton" />
-
-    <Button
-        android:id="@+id/resetProgram"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="16dp"
-        android:text="Reset"
-        app:layout_constraintEnd_toStartOf="@+id/stopButton"
-        app:layout_constraintStart_toEndOf="@+id/changeProgram"
         app:layout_constraintTop_toBottomOf="@+id/setupButton" />
 
     <Button
@@ -91,31 +80,64 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginTop="16dp"
-        android:text="Stop"
+        android:text="Start"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/resetProgram"
+        app:layout_constraintStart_toEndOf="@+id/changeProgram"
         app:layout_constraintTop_toBottomOf="@+id/setupButton" />
-
-    <TextView
-        android:id="@+id/tempoIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="tempo"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/changeProgram" />
 
     <SeekBar
         android:id="@+id/tempoSlider"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="32dp"
         android:layout_marginEnd="24dp"
-        android:max="255"
+        android:max="100"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tempoIndicator" />
+        app:layout_constraintTop_toBottomOf="@+id/changeProgram" />
+
+    <LinearLayout
+        android:id="@+id/color_row"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <Button
+            android:id="@+id/color_red"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:text="Red"
+            android:textColor="#FFFFFF"
+            app:backgroundTint="#E53935" />
+
+        <Button
+            android:id="@+id/color_yellow"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:text="Yellow"
+            android:textColor="#000000"
+            app:backgroundTint="#FFD600" />
+
+        <Button
+            android:id="@+id/color_green"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:text="Green"
+            android:textColor="#000000"
+            app:backgroundTint="#43E05A" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

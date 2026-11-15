@@ -176,4 +176,64 @@ public class Animate {
         return p;
     }
 
+
+    // ---- Traffic lights ----
+    // Every step lasts one tempo, so "10 x tempo" is ten steps in a row.
+
+    private static final int LONG_STEPS = 10;
+    private static final int SHORT_STEPS = 2;
+    private static final int BLINK_STEPS = 5;
+    private static final int CLEAR_STEPS = 2;  // all red between two directions
+
+    // One road of an intersection: green, yellow, then red for the whole time the other road
+    // has red+yellow, green, yellow (with an all-red gap on each side), and red+yellow to go.
+    private static final byte[] INTERSECTION_CYCLE = concat(
+            concat(repeat(GRN, LONG_STEPS), repeat(YLW, SHORT_STEPS)),
+            concat(repeat(RED, CLEAR_STEPS + SHORT_STEPS + LONG_STEPS + SHORT_STEPS + CLEAR_STEPS),
+                    repeat((byte) (RED | YLW), SHORT_STEPS)));
+
+    // red, red+yellow, green, yellow, and back to red
+    private static final byte[] TRAFFIC_CYCLE = concat(
+            concat(repeat(RED, LONG_STEPS), repeat((byte) (RED | YLW), SHORT_STEPS)),
+            concat(repeat(GRN, LONG_STEPS), repeat(YLW, SHORT_STEPS)));
+
+    private static byte[] rotate(byte[] p, int shift) {
+        byte[] out = new byte[p.length];
+        for (int i = 0; i < p.length; i++) {
+            out[i] = p[(i + shift) % p.length];
+        }
+        return out;
+    }
+
+    /** Every light runs the normal red - red+yellow - green - yellow cycle, all in step. */
+    public static ArrayList<Program> Traffic(ArrayList<Client> clients) {
+        ArrayList<Program> program = new ArrayList<>(clients.size());
+        for (Client c : clients) {
+            program.add(new Program(TRAFFIC_CYCLE.clone(), c));
+        }
+        return program;
+    }
+
+    /** Every other light (left to right) is half a cycle behind: one road has green while the
+     *  other has red. They switch through yellow, with a moment of red on both in between. */
+    public static ArrayList<Program> Intersection(ArrayList<Client> clients) {
+        Collections.sort(clients, new Client.ClientsComparator());
+        ArrayList<Program> program = new ArrayList<>(clients.size());
+        for (int i = 0; i < clients.size(); i++) {
+            int shift = (i % 2 == 0) ? 0 : INTERSECTION_CYCLE.length / 2;
+            program.add(new Program(rotate(INTERSECTION_CYCLE, shift), clients.get(i)));
+        }
+        return program;
+    }
+
+    /** All lights blink one colour, slowly: on for 5 steps, off for 5. */
+    public static ArrayList<Program> Blink(ArrayList<Client> clients, byte color) {
+        byte[] pattern = concat(repeat(color, BLINK_STEPS), repeat(NON, BLINK_STEPS));
+        ArrayList<Program> program = new ArrayList<>(clients.size());
+        for (Client c : clients) {
+            program.add(new Program(pattern.clone(), c));
+        }
+        return program;
+    }
+
 }

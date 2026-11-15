@@ -173,7 +173,7 @@ public class ServerService implements NetworkSender {
             sendExecutor.execute(() -> {
                 ShowClock.Sample s = clock.sample();
                 byte[] payload = new byte[] {
-                        (byte) s.tempo,
+                        (byte) (s.tempo >> 8), (byte) s.tempo,
                         (byte) (s.step >> 24), (byte) (s.step >> 16), (byte) (s.step >> 8), (byte) s.step,
                         (byte) (s.phase >> 8), (byte) s.phase
                 };

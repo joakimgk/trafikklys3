@@ -21,29 +21,34 @@ import com.example.trafikklys3.controller.TrafficLightListener;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.ClientRegistry;
 import com.example.trafikklys3.model.LightStore;
+import com.example.trafikklys3.model.Programs;
 import com.example.trafikklys3.network.ServerService;
 import com.example.trafikklys3.network.SetupService;
 
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements TrafficLightListener {
 
     private ServerService serverService;
 
-    private static final int TEMPO_MIN = 1;
-    private static final int TEMPO_MAX = 255;
+    // Tempo is the length of one step in firmware ticks of 1.4 ms: 2857 ticks is 4 seconds
+    private static final int TEMPO_MIN = 5;
+    private static final int TEMPO_MAX = 2857;
+    private static final int SLIDER_MAX = 100;  // the slider is logarithmic: fine at fast tempos
 
     private int tempo = 60;
 
     private TrafficLightContainer mContainer;
-    private TextView tempoIndicator;
-    private Button changeProgram, resetProgram, stopButton, setupButton;
+    private Button changeProgram, stopButton, setupButton;
     private SeekBar tempoSlider;
 
     private View detailsPanel;
     private TextView detailsText;
     private Button rotateButton, removeButton;
+    private Button colorRed, colorYellow, colorGreen;
 
     private ShowController showController;
 
@@ -80,22 +85,24 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
         setupButton = findViewById(R.id.setupButton);
         changeProgram = findViewById(R.id.changeProgram);
-        resetProgram = findViewById(R.id.resetProgram);
         stopButton = findViewById(R.id.stopButton);
-        tempoIndicator = findViewById(R.id.tempoIndicator);
         tempoSlider = findViewById(R.id.tempoSlider);
         detailsPanel = findViewById(R.id.details_panel);
         detailsText = findViewById(R.id.details_text);
         rotateButton = findViewById(R.id.rotate_button);
         removeButton = findViewById(R.id.remove_button);
+        colorRed = findViewById(R.id.color_red);
+        colorYellow = findViewById(R.id.color_yellow);
+        colorGreen = findViewById(R.id.color_green);
 
-        updateTempoDisplay();
-        tempoSlider.setProgress(tempo);
+        tempoSlider.setMax(SLIDER_MAX);
+        tempoSlider.setProgress(progressFromTempo(tempo));
 
         // Setup needs at least one unit to talk to
         setupButton.setEnabled(false);
         showController.setPresenceListener(() -> {
             setupButton.setEnabled(setupService.isAssigning() || showController.hasOnlineUnit());
+            updateRunButton();
             updateDetails();
         });
 
@@ -112,6 +119,7 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             if (setupService.isAssigning()) return;  // units are busy identifying themselves
             showController.nextShow();
             showShowName();
+            updateRunButton();
         });
 
         changeProgram.setOnLongClickListener(v -> {
@@ -120,14 +128,12 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             return true;
         });
 
-        resetProgram.setOnClickListener(v -> {
-            if (setupService.isAssigning()) return;
-            showController.resetProgram();
-        });
-
+        // one button: Stop while a show runs, Start (the current show, rebuilt from the layout) otherwise
         stopButton.setOnClickListener(v -> {
             if (setupService.isAssigning()) return;
-            showController.stopProgram();
+            if (showController.isRunning()) showController.stopProgram();
+            else showController.startShow();
+            updateRunButton();
         });
 
         rotateButton.setOnClickListener(v -> {
@@ -138,16 +144,18 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
         removeButton.setOnClickListener(v -> removeSelected());
 
+        colorRed.setOnClickListener(v -> setColor(Programs.RED));
+        colorYellow.setOnClickListener(v -> setColor(Programs.YLW));
+        colorGreen.setOnClickListener(v -> setColor(Programs.GRN));
+
         // perform seek bar change listener event used for getting the progress value
         tempoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) tempoIndicator.setText("tempo: " + Math.max(1, progress));
-            }
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {}
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                checkTempo(Math.max(1, seekBar.getProgress()));
+                checkTempo(tempoFromProgress(seekBar.getProgress()));
             }
         });
 
@@ -319,6 +327,7 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         menu.setOnMenuItemClickListener(item -> {
             showController.selectShow(item.getItemId());
             showShowName();
+            updateRunButton();
             return true;
         });
         menu.show();
@@ -331,13 +340,31 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         if (newTempo == tempo) return;
 
         tempo = newTempo;
-        updateTempoDisplay();
 
         showController.setTempo(tempo);
     }
 
-    private void updateTempoDisplay() {
-        tempoIndicator.setText("tempo: " + tempo);
+    private static int tempoFromProgress(int progress) {
+        double ratio = (double) TEMPO_MAX / TEMPO_MIN;
+        return (int) Math.round(TEMPO_MIN * Math.pow(ratio, progress / (double) SLIDER_MAX));
+    }
+
+    private static int progressFromTempo(int tempo) {
+        double ratio = (double) TEMPO_MAX / TEMPO_MIN;
+        return (int) Math.round(SLIDER_MAX * Math.log((double) tempo / TEMPO_MIN) / Math.log(ratio));
+    }
+
+    // Light one lamp on the selected light by hand, or on every light if none is selected
+    private void setColor(byte color) {
+        if (setupService.isAssigning()) return;
+        List<TrafficLight> targets = selected != null
+                ? Collections.singletonList(selected)
+                : new ArrayList<>(mContainer.getLights());
+        showController.setManualColor(targets, color);
+    }
+
+    private void updateRunButton() {
+        stopButton.setText(showController.isRunning() ? "Stop" : "Start");
     }
 
     @Override

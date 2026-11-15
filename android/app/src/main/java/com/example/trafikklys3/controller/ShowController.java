@@ -21,6 +21,9 @@ import com.example.trafikklys3.ui.TrafficLightContainer;
 import com.example.trafikklys3.util.Animate;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class ShowController implements ClientListener {
@@ -45,9 +48,13 @@ public class ShowController implements ClientListener {
     private int tempo = 60;
 
     // Shows built for the placed units; the user picks one
-    private static final String[] SHOW_NAMES = {"Trail", "Wave", "Pendulum"};
+    private static final String[] SHOW_NAMES = {
+            "Trail", "Wave", "Pendulum", "Traffic", "Intersection",
+            "Blink red", "Blink yellow", "Blink green"};
     private static final int MAX_PROGRAM_LENGTH = 255;  // what fits in one packet
     private int showIndex = 0;
+
+    private boolean running = false;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -100,7 +107,7 @@ public class ShowController implements ClientListener {
         this.tempo = tempo;
         clock.setTempo(tempo);
         simulator.reschedule();
-        byte[] payload = new byte[] { (byte) (tempo & 0xFF) };
+        byte[] payload = new byte[] { (byte) (tempo >> 8), (byte) tempo };
         network.sendToAll(EspProtocol.buildCommand(CMD_TEMPO, payload));
         network.syncBurst();
     }
@@ -111,11 +118,6 @@ public class ShowController implements ClientListener {
             network.sendUnicast(p.mClient, EspProtocol.buildCommand(CMD_PROGRAM, p.mProgram));
             simulator.stage(p.mClient, p.mProgram);
         }
-    }
-
-    /** Rebuild the current show from the layout as it is now, and start it over. */
-    public void resetProgram() {
-        startShow();
     }
 
     // Units found by the network. Lights are placed by the user, so nothing to draw here.
@@ -154,6 +156,7 @@ public class ShowController implements ClientListener {
         if (clients.isEmpty()) return;
 
         simulator.stopAll();  // forget the previous show, including old stand-ins
+        for (TrafficLight light : container.getLights()) light.setManualBits(-1);
 
         ArrayList<Program> program = buildShow(clients);
         if (tooLong(program)) {
@@ -169,12 +172,52 @@ public class ShowController implements ClientListener {
         network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
         simulator.swapAll();
         network.syncBurst();
+        running = true;
     }
 
+    /** Is a show running (on screen and on the units)? */
+    public boolean isRunning() {
+        return running;
+    }
+
+    private final Map<Integer, Client> standIns = new HashMap<>();
+
     private Client standIn(TrafficLight light) {
-        Client c = new Client(-light.getLightId(), "light-" + light.getLightId(), null);
+        Client c = standIns.get(light.getLightId());
+        if (c == null) {
+            c = new Client(-light.getLightId(), "light-" + light.getLightId(), null);
+            standIns.put(light.getLightId(), c);
+        }
         c.mTrafficLight = light;
         return c;
+    }
+
+    /** Light one lamp on each of these lights by hand. Pressing the same colour again turns it off. */
+    public void setManualColor(List<TrafficLight> lights, byte color) {
+        boolean allSet = !lights.isEmpty();
+        for (TrafficLight light : lights) {
+            if (light.getManualBits() != color) allSet = false;
+        }
+        byte bits = allSet ? Programs.NON : color;
+
+        for (TrafficLight light : lights) {
+            light.setManualBits(bits);
+            byte[] program = new byte[] { bits };
+
+            Client c = light.getClient();
+            if (c == null) {
+                c = standIn(light);  // no unit: the light only changes on screen
+            } else {
+                network.sendUnicast(c, EspProtocol.buildCommand(CMD_PROGRAM, program));
+                network.sendUnicast(c, EspProtocol.buildCommand(CMD_SWAP));
+                if (currentProgram != null) {
+                    for (Program p : currentProgram) {
+                        if (p.mClient == c) p.mProgram = program;  // a reconnecting unit gets this, not the show
+                    }
+                }
+            }
+            preview(c, program);
+        }
     }
 
     public String getShowName() {
@@ -207,6 +250,16 @@ public class ShowController implements ClientListener {
                 return Animate.Wave(copy);
             case 2:
                 return Animate.Pendulum(copy);
+            case 3:
+                return Animate.Traffic(copy);
+            case 4:
+                return Animate.Intersection(copy);
+            case 5:
+                return Animate.Blink(copy, Programs.RED);
+            case 6:
+                return Animate.Blink(copy, Programs.YLW);
+            case 7:
+                return Animate.Blink(copy, Programs.GRN);
             default:
                 return Animate.Trail(copy);
         }
@@ -222,12 +275,14 @@ public class ShowController implements ClientListener {
     /** Stop the show on screen and on every unit: the lamps go dark. */
     public void stopProgram() {
         stopShow();
+        for (TrafficLight light : container.getLights()) light.setManualBits(-1);
         network.sendToAll(EspProtocol.buildCommand(CMD_PROGRAM, new byte[] { Programs.NON }));
         network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
     }
 
     /** Back to the idle state used during setup: nothing animated, nothing resent to the units. */
     public void stopShow() {
+        running = false;
         currentProgram = null;
         simulator.stopAll();
     }

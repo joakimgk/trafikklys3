@@ -40,6 +40,9 @@ public class TrafficLight extends FrameLayout
 
     private TrafficLightListener listener;
 
+    // the lamp the user lit by hand, or -1 while the light follows a show
+    private int manualBits = -1;
+
     public TrafficLight(Context context)
     {
         super(context);
@@ -73,6 +76,14 @@ public class TrafficLight extends FrameLayout
 
     public void setListener(TrafficLightListener listener) {
         this.listener = listener;
+    }
+
+    public int getManualBits() {
+        return manualBits;
+    }
+
+    public void setManualBits(int bits) {
+        manualBits = bits;
     }
 
     public int getLightId() {
