@@ -26,7 +26,14 @@ const short int GREEN = 3;  // remap RX
 const short int YELLOW = 0;
 const short int RED = 2;
 
-IPAddress remoteAddress;
+// Apps (phones) that have looked for this unit. Each one is answered directly, so two phones
+// can watch the same unit.
+#define MAX_APPS 4
+#define APP_TIMEOUT_MS 30000
+IPAddress appAddress[MAX_APPS];
+unsigned long appSeen[MAX_APPS];
+bool appUsed[MAX_APPS];
+IPAddress currentSender;   // who sent the packet being handled
 bool remoteKnown = false;
 bool ready = false;
 bool programSet = false;  // app has swapped in a program since boot
@@ -144,8 +151,7 @@ void pollUdp() {
   }
 
   udpRxLen = UDP.read(udpRxBuf, packetSize);
-  // Always reply to whoever last talked to us (phone may have changed)
-  remoteAddress = UDP.remoteIP();
+  currentSender = UDP.remoteIP();
   if (!remoteKnown) {
     remoteKnown = true;
 
@@ -164,13 +170,42 @@ void pollUdp() {
   processUdpPacket(udpRxBuf, udpRxLen);
 }
 
-void sendAnnounce() {
+void sendAnnounce(IPAddress to) {
   uint8_t packet[7];
   packet[0] = CMD_ANNOUNCE;
   packet[1] = 5;
   pack_u32(clientID, packet + 2);
   packet[6] = programSet ? 1 : 0;
-  sendUdp(packet, sizeof(packet));
+  sendUdpTo(to, packet, sizeof(packet));
+}
+
+// Note (or refresh) an app that has looked for us
+void rememberApp(IPAddress ip) {
+  int slot = -1;
+  for (int i = 0; i < MAX_APPS; i++) {
+    if (appUsed[i] && appAddress[i] == ip) {
+      slot = i;
+      break;
+    }
+  }
+  if (slot < 0) {
+    for (int i = 0; i < MAX_APPS; i++) {
+      if (!appUsed[i]) {
+        slot = i;
+        break;
+      }
+    }
+  }
+  if (slot < 0) {
+    // all slots taken: replace the app we heard from longest ago
+    slot = 0;
+    for (int i = 1; i < MAX_APPS; i++) {
+      if (appSeen[i] < appSeen[slot]) slot = i;
+    }
+  }
+  appUsed[slot] = true;
+  appAddress[slot] = ip;
+  appSeen[slot] = millis();
 }
 
 inline void pack_u32(uint32_t value, uint8_t *out) {
@@ -190,19 +225,15 @@ inline void pack_u8(uint8_t value, uint8_t *out) {
 }
 
 
-bool sendUdp(const uint8_t *data, size_t len) {
-  if (!remoteKnown || len == 0) return false;
+bool sendUdpTo(IPAddress to, const uint8_t *data, size_t len) {
+  if (len == 0) return false;
 
-  if (!UDP.beginPacket(remoteAddress, UDP_PORT)) {
+  if (!UDP.beginPacket(to, UDP_PORT)) {
     return false;
   }
 
   UDP.write(data, len);
   return UDP.endPacket();
-}
-bool sendUdp(const char *text) {
-  if (text == nullptr) return false;
-  return sendUdp((const uint8_t *)text, strlen(text));
 }
 
 
@@ -218,13 +249,17 @@ void printBytes(char buf[], int len) {;
 void loop() {
   static unsigned long lastHeartbeat = 0;
 
-  if (remoteKnown && millis() - lastHeartbeat > 3000) {
+  if (millis() - lastHeartbeat > 3000) {
     lastHeartbeat = millis();
     uint8_t packet[6];
     packet[0] = CMD_HEARTBEAT;
     packet[1] = 4;
     pack_u32(clientID, packet + 2);
-    sendUdp(packet, sizeof(packet));
+    for (int i = 0; i < MAX_APPS; i++) {
+      if (appUsed[i] && millis() - appSeen[i] < APP_TIMEOUT_MS) {
+        sendUdpTo(appAddress[i], packet, sizeof(packet));
+      }
+    }
   }
 
   pollUdp();
@@ -413,8 +448,9 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       if (len >= 7) applySync(payload);
       break;
 
-    case 0x77: // DISCOVER: app is looking for units
-      sendAnnounce();
+    case 0x77: // DISCOVER: an app is looking for units
+      rememberApp(currentSender);
+      sendAnnounce(currentSender);
       break;
       
     default:
