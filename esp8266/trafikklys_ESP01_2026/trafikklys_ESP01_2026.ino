@@ -12,7 +12,13 @@
 #define PING_TIME 2000
 #define RESET_TIME 500
 
-#define SYNC_JUMP_TICKS 29   // beacon errors above this (~40 ms) jump straight to the target
+// Sync: beacons only ever arrive late (the router batches broadcasts), so the best of the last
+// SYNC_WINDOW errors is the most trustworthy. The unit's own timer is far steadier than the
+// network, so small errors are left alone and the rest is corrected a little at a time.
+#define SYNC_WINDOW 16       // beacons remembered (about 8 seconds)
+#define SYNC_DEADBAND 4      // ticks (~5.6 ms): smaller errors are ignored
+#define SYNC_MAX_SLEW 4      // ticks (~5.6 ms): most a single beacon may move the unit
+#define SYNC_JUMP 100        // ticks (~140 ms): further off than this, jump straight to the target
 #define SYNC_DEBUG 1         // print one line per sync beacon on the serial port (TX only)
 
 #define CMD_ANNOUNCE 0x77
@@ -43,6 +49,9 @@ const uint32 clientID = system_get_chip_id();
 char clientIDstring[9];
 
 volatile bool hardSync = true;  // next sync beacon sets the position outright
+int32_t syncErr[SYNC_WINDOW];   // recent beacon errors, in ticks (target minus where we were)
+uint8_t syncCount = 0;
+uint8_t syncHead = 0;
 volatile unsigned int tempo = 100;
 char program[MAX_LENGTH];
 char rec_program[MAX_LENGTH];
@@ -319,8 +328,8 @@ ICACHE_RAM_ATTR void blink() {
 
 // Lock to the app's show clock. Payload: tempo (u8), step counter (u32), phase within step (u16, 0..65535).
 // Every unit gets the same broadcast, so units stay in step with each other even if the
-// network delays the beacon. Small errors are corrected gradually; big ones (and the first
-// beacon after a program swap or tempo change) jump straight to the target.
+// network delays the beacon. The first beacon after a program swap or tempo change jumps
+// straight to the target; after that the unit mostly runs on its own timer.
 void applySync(uint8_t *p) {
   uint8_t newTempo = p[0] < 1 ? 1 : p[0];
   uint32_t k = ((uint32_t)p[1] << 24) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 8) | p[4];
@@ -343,15 +352,37 @@ void applySync(uint8_t *p) {
   if (err > M / 2) err -= M;
   else if (err < -M / 2) err += M;
 
-  int32_t pos;
-  if (jump || abs(err) > SYNC_JUMP_TICKS) {
-    pos = target;
-    hardSync = false;
-  } else {
-    pos = cur + err / 2;
+  if (jump) {
+    syncCount = 0;
+    syncHead = 0;
   }
-  pos = ((pos % M) + M) % M;
+  syncErr[syncHead] = err;
+  syncHead = (syncHead + 1) % SYNC_WINDOW;
+  if (syncCount < SYNC_WINDOW) syncCount++;
 
+  // A late beacon makes the error look smaller, never bigger: the largest recent error is
+  // the one that was delayed least.
+  int32_t best = syncErr[0];
+  for (uint8_t i = 1; i < syncCount; i++) {
+    if (syncErr[i] > best) best = syncErr[i];
+  }
+
+  int32_t corr = 0;
+  if (jump) {
+    corr = err;
+    hardSync = false;
+  } else if (best > SYNC_JUMP || (syncCount >= 4 && best < -SYNC_JUMP)) {
+    corr = best;
+  } else if (best > SYNC_DEADBAND || best < -SYNC_DEADBAND) {
+    corr = best / 2;
+    if (corr > SYNC_MAX_SLEW) corr = SYNC_MAX_SLEW;
+    else if (corr < -SYNC_MAX_SLEW) corr = -SYNC_MAX_SLEW;
+  }
+
+  // the position moves by corr, so the remembered errors shrink by the same amount
+  for (uint8_t i = 0; i < syncCount; i++) syncErr[i] -= corr;
+
+  int32_t pos = ((cur + corr) % M + M) % M;
   int newStep = pos / newTempo;
   ticks = pos % newTempo;
   if (newStep != step) {
@@ -361,7 +392,8 @@ void applySync(uint8_t *p) {
   interrupts();
 
 #if SYNC_DEBUG
-  Serial.printf("sync k=%lu tempo=%u err=%ld ticks %s\n", (unsigned long)k, newTempo, (long)err, jump || abs(err) > SYNC_JUMP_TICKS ? "JUMP" : "slew");
+  Serial.printf("sync k=%lu tempo=%u err=%ld best=%ld corr=%ld%s\n", (unsigned long)k, newTempo,
+                (long)err, (long)best, (long)corr, jump ? " JUMP" : "");
 #endif
 }
 
