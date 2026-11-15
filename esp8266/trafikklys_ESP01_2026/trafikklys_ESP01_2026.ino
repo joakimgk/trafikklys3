@@ -1,8 +1,9 @@
 // Firmware version: bump it with every change, so the serial monitor shows which build runs.
+//   5.0.0  tempo is 16 bits (steps up to ~5 s long); tempo and sync packets changed: reflash all units
 //   4.5.0  sync beacons filtered by least delay, corrected gradually
 //   4.4.0  answers each app directly, remembers several apps
 //   4.3.0  lamps driven from the timer, locks to the app's show clock
-#define FIRMWARE_VERSION "4.5.0"
+#define FIRMWARE_VERSION "5.0.0"
 
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager
 #include <ESP8266WiFi.h>
@@ -21,6 +22,7 @@
 // Sync: beacons only ever arrive late (the router batches broadcasts), so the best of the last
 // SYNC_WINDOW errors is the most trustworthy. The unit's own timer is far steadier than the
 // network, so small errors are left alone and the rest is corrected a little at a time.
+#define MAX_TEMPO 4000       // ticks per step (1 tick = 1.4 ms, so about 5.6 s)
 #define SYNC_WINDOW 16       // beacons remembered (about 8 seconds)
 #define SYNC_DEADBAND 4      // ticks (~5.6 ms): smaller errors are ignored
 #define SYNC_MAX_SLEW 4      // ticks (~5.6 ms): most a single beacon may move the unit
@@ -332,14 +334,16 @@ ICACHE_RAM_ATTR void blink() {
   showStep();
 }
 
-// Lock to the app's show clock. Payload: tempo (u8), step counter (u32), phase within step (u16, 0..65535).
+// Lock to the app's show clock. Payload: tempo (u16), step counter (u32), phase within step (u16, 0..65535).
 // Every unit gets the same broadcast, so units stay in step with each other even if the
 // network delays the beacon. The first beacon after a program swap or tempo change jumps
 // straight to the target; after that the unit mostly runs on its own timer.
 void applySync(uint8_t *p) {
-  uint8_t newTempo = p[0] < 1 ? 1 : p[0];
-  uint32_t k = ((uint32_t)p[1] << 24) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 8) | p[4];
-  uint16_t frac = ((uint16_t)p[5] << 8) | p[6];
+  uint16_t newTempo = ((uint16_t)p[0] << 8) | p[1];
+  if (newTempo < 1) newTempo = 1;
+  else if (newTempo > MAX_TEMPO) newTempo = MAX_TEMPO;
+  uint32_t k = ((uint32_t)p[2] << 24) | ((uint32_t)p[3] << 16) | ((uint32_t)p[4] << 8) | p[5];
+  uint16_t frac = ((uint16_t)p[6] << 8) | p[7];
 
   noInterrupts();
   int len = length;
@@ -437,11 +441,11 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       break;
 
     case 0x01:  // TEMPO
-      test = payload[0];
+      test = len >= 2 ? (((uint16_t)payload[0] << 8) | payload[1]) : payload[0];
 
       // safety....
       if (test < 1) test = 1;
-      else if (test > 255) test = 256;
+      else if (test > MAX_TEMPO) test = MAX_TEMPO;
       
       // keep the position within the step when the speed changes, then lock hard on the next beacon
       noInterrupts();
@@ -483,7 +487,7 @@ void handlePacket(uint8_t cmd, uint8_t *payload, uint8_t len) {
       break;
 
     case 0x05:  // SYNC beacon
-      if (len >= 7) applySync(payload);
+      if (len >= 8) applySync(payload);
       break;
 
     case 0x77: // DISCOVER: an app is looking for units
