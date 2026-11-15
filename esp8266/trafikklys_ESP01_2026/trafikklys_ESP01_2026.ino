@@ -1,3 +1,9 @@
+// Firmware version: bump it with every change, so the serial monitor shows which build runs.
+//   4.5.0  sync beacons filtered by least delay, corrected gradually
+//   4.4.0  answers each app directly, remembers several apps
+//   4.3.0  lamps driven from the timer, locks to the app's show clock
+#define FIRMWARE_VERSION "4.5.0"
+
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
@@ -100,7 +106,7 @@ void setup() {
   timer1_write(TIMER_DELAY); // 25000000 / 5 ticks per  us from TIM_DIV16 == 200,000 us interval 
 
   sprintf(clientIDstring, "%08x", clientID);
-  Serial.println("\nTrafikklys 4.2\n");
+  Serial.println("\nTrafikklys " FIRMWARE_VERSION "\n");
   Serial.print("ClientID: ");
   Serial.println(clientID);
 
