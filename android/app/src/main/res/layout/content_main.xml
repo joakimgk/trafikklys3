@@ -54,16 +54,6 @@
     </LinearLayout>
 
     <Button
-        android:id="@+id/setupButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Setup"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/details_panel" />
-
-    <Button
         android:id="@+id/changeProgram"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -72,7 +62,7 @@
         app:layout_constraintEnd_toStartOf="@+id/stopButton"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/setupButton" />
+        app:layout_constraintTop_toBottomOf="@+id/details_panel" />
 
     <Button
         android:id="@+id/stopButton"
@@ -83,7 +73,7 @@
         android:text="Start"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@+id/changeProgram"
-        app:layout_constraintTop_toBottomOf="@+id/setupButton" />
+        app:layout_constraintTop_toBottomOf="@+id/details_panel" />
 
     <SeekBar
         android:id="@+id/tempoSlider"
@@ -96,6 +86,16 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/changeProgram" />
+
+    <CheckBox
+        android:id="@+id/detect_bpm"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Detect BPM"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tempoSlider" />
 
     <LinearLayout
         android:id="@+id/color_row"

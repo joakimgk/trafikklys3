@@ -7,6 +7,7 @@ import static com.example.trafikklys3.model.Programs.YLW;
 
 import android.util.Pair;
 
+import com.example.trafikklys3.controller.ShowClock;
 import com.example.trafikklys3.model.Client;
 import com.example.trafikklys3.model.Program;
 
@@ -226,9 +227,44 @@ public class Animate {
         return program;
     }
 
-    /** All lights blink one colour, slowly: on for 5 steps, off for 5. */
-    public static ArrayList<Program> Blink(ArrayList<Client> clients, byte color) {
-        byte[] pattern = concat(repeat(color, BLINK_STEPS), repeat(NON, BLINK_STEPS));
+    // While "on" lasts up to this long, a blink is on and off for equally long. Slower than
+    // that, the dark time shrinks: a long dark gap looks bad on a light that is on for seconds.
+    private static final double BLINK_EVEN_LIMIT_MS = 2000;
+    private static final double BLINK_SHRINK_EXPONENT = 0.5;
+
+    /** How a blink is laid out: how many steps on and off, and the step length the units need. */
+    public static class BlinkPlan {
+        public final int onSteps;
+        public final int offSteps;
+        public final int tempoTicks;
+
+        BlinkPlan(int onSteps, int offSteps, int tempoTicks) {
+            this.onSteps = onSteps;
+            this.offSteps = offSteps;
+            this.tempoTicks = tempoTicks;
+        }
+    }
+
+    /**
+     * "On" lasts 5 steps of the user's tempo. Off lasts as long, until that is longer than
+     * BLINK_EVEN_LIMIT_MS; after that it gets shorter the slower the tempo is. A step can't be
+     * split, so a short dark time is made with a finer step: more steps, each shorter.
+     */
+    public static BlinkPlan planBlink(int tempoTicks) {
+        double onMs = BLINK_STEPS * tempoTicks * ShowClock.ESP_TICK_MS;
+        double offMs = onMs <= BLINK_EVEN_LIMIT_MS
+                ? onMs
+                : BLINK_EVEN_LIMIT_MS * Math.pow(BLINK_EVEN_LIMIT_MS / onMs, BLINK_SHRINK_EXPONENT);
+
+        int ratio = (int) Math.max(1, Math.round(onMs / offMs));  // on is this many times longer
+        int onSteps = BLINK_STEPS * ratio;
+        int ticks = (int) Math.max(1, Math.round((double) tempoTicks / ratio));
+        return new BlinkPlan(onSteps, BLINK_STEPS, ticks);
+    }
+
+    /** All lights blink one colour, slowly. */
+    public static ArrayList<Program> Blink(ArrayList<Client> clients, byte color, BlinkPlan plan) {
+        byte[] pattern = concat(repeat(color, plan.onSteps), repeat(NON, plan.offSteps));
         ArrayList<Program> program = new ArrayList<>(clients.size());
         for (Client c : clients) {
             program.add(new Program(pattern.clone(), c));

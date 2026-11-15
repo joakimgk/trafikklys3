@@ -1,11 +1,14 @@
 package com.example.trafikklys3.ui;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.PopupMenu;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -15,6 +18,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.trafikklys3.R;
+import com.example.trafikklys3.audio.BpmDetector;
 import com.example.trafikklys3.controller.ShowClock;
 import com.example.trafikklys3.controller.ShowController;
 import com.example.trafikklys3.controller.TrafficLightListener;
@@ -34,21 +38,24 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
     private ServerService serverService;
 
-    // Tempo is the length of one step in firmware ticks of 1.4 ms: 2857 ticks is 4 seconds
+    // Tempo is the length of one step in firmware ticks of 1.4 ms: 1428 ticks is 2 seconds
     private static final int TEMPO_MIN = 5;
-    private static final int TEMPO_MAX = 2857;
+    private static final int TEMPO_MAX = 1428;
     private static final int SLIDER_MAX = 100;  // the slider is logarithmic: fine at fast tempos
 
     private int tempo = 60;
 
     private TrafficLightContainer mContainer;
-    private Button changeProgram, stopButton, setupButton;
+    private Button changeProgram, stopButton;
+    private MenuItem setupItem;
     private SeekBar tempoSlider;
 
     private View detailsPanel;
     private TextView detailsText;
     private Button rotateButton, removeButton;
     private Button colorRed, colorYellow, colorGreen;
+    private CheckBox detectBpm;
+    private BpmDetector bpmDetector;
 
     private ShowController showController;
 
@@ -83,7 +90,6 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         setupService = new SetupService(registry, mContainer, serverService, showController, lightStore);
         setupService.setSelectionAccess(() -> selected, this::select);
 
-        setupButton = findViewById(R.id.setupButton);
         changeProgram = findViewById(R.id.changeProgram);
         stopButton = findViewById(R.id.stopButton);
         tempoSlider = findViewById(R.id.tempoSlider);
@@ -91,6 +97,7 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         detailsText = findViewById(R.id.details_text);
         rotateButton = findViewById(R.id.rotate_button);
         removeButton = findViewById(R.id.remove_button);
+        detectBpm = findViewById(R.id.detect_bpm);
         colorRed = findViewById(R.id.color_red);
         colorYellow = findViewById(R.id.color_yellow);
         colorGreen = findViewById(R.id.color_green);
@@ -98,20 +105,9 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         tempoSlider.setMax(SLIDER_MAX);
         tempoSlider.setProgress(progressFromTempo(tempo));
 
-        // Setup needs at least one unit to talk to
-        setupButton.setEnabled(false);
         showController.setPresenceListener(() -> {
-            setupButton.setEnabled(setupService.isAssigning() || showController.hasOnlineUnit());
+            updateSetupItem();
             updateRunButton();
-            updateDetails();
-        });
-
-        setupButton.setOnClickListener(v -> {
-            String problem = setupService.isAssigning()
-                    ? setupService.confirmCurrent()
-                    : setupService.startSetup();
-            if (problem != null) Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
-            setupButton.setText(setupService.getButtonLabel());
             updateDetails();
         });
 
@@ -144,6 +140,11 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
         removeButton.setOnClickListener(v -> removeSelected());
 
+        detectBpm.setOnCheckedChangeListener((box, checked) -> {
+            if (checked) startBpmDetection();
+            else stopBpmDetection();
+        });
+
         colorRed.setOnClickListener(v -> setColor(Programs.RED));
         colorYellow.setOnClickListener(v -> setColor(Programs.YLW));
         colorGreen.setOnClickListener(v -> setColor(Programs.GRN));
@@ -153,7 +154,10 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
 
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {}
 
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            // touching the slider takes over from the beat detection
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {
+                detectBpm.setChecked(false);
+            }
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
                 checkTempo(tempoFromProgress(seekBar.getProgress()));
             }
@@ -190,7 +194,26 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
+        setupItem = menu.findItem(R.id.action_setup);
+        updateSetupItem();
         return true;
+    }
+
+    // Setup needs at least one unit to talk to; while it runs the item reads Next / Finish
+    private void updateSetupItem() {
+        if (setupItem == null) return;
+        setupItem.setTitle(setupService.getButtonLabel());
+        setupItem.setEnabled(setupService.isAssigning() || showController.hasOnlineUnit());
+    }
+
+    private void onSetupPressed() {
+        String problem = setupService.isAssigning()
+                ? setupService.confirmCurrent()
+                : setupService.startSetup();
+        if (problem != null) Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
+        updateSetupItem();
+        updateRunButton();
+        updateDetails();
     }
 
     @Override
@@ -199,6 +222,10 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             TrafficLight light = mContainer.addNewLight();
             lightStore.save(mContainer.getLights());
             select(light);
+            return true;
+        }
+        if (item.getItemId() == R.id.action_setup) {
+            onSetupPressed();
             return true;
         }
         if (item.getItemId() == R.id.action_remove_all) {
@@ -354,6 +381,63 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
         return (int) Math.round(SLIDER_MAX * Math.log((double) tempo / TEMPO_MIN) / Math.log(ratio));
     }
 
+    // ---- tempo from the music ----
+
+    private static final int REQUEST_MIC = 1;
+    private static final double STEPS_PER_BEAT = 1;   // one step of the show per beat
+    private static final double TEMPO_CHANGE_MIN = 0.03;  // follow only changes of more than 3%
+
+    private void startBpmDetection() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, REQUEST_MIC);
+            return;
+        }
+        if (bpmDetector != null) return;
+
+        bpmDetector = new BpmDetector(bpm -> runOnUiThread(() -> onBpmDetected(bpm)));
+        if (!bpmDetector.start()) {
+            bpmDetector = null;
+            Toast.makeText(this, "Could not use the microphone", Toast.LENGTH_SHORT).show();
+            detectBpm.setChecked(false);
+        }
+    }
+
+    private void stopBpmDetection() {
+        if (bpmDetector != null) {
+            bpmDetector.stop();
+            bpmDetector = null;
+        }
+        detectBpm.setText("Detect BPM");
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_MIC) return;
+
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (detectBpm.isChecked()) startBpmDetection();
+        } else {
+            Toast.makeText(this, "Beat detection needs the microphone", Toast.LENGTH_SHORT).show();
+            detectBpm.setChecked(false);
+        }
+    }
+
+    // The music's tempo: move the slider there and run the show at it
+    private void onBpmDetected(double bpm) {
+        if (!detectBpm.isChecked()) return;
+        detectBpm.setText("Detect BPM  \u00B7  " + Math.round(bpm));
+
+        double stepMs = 60000.0 / bpm / STEPS_PER_BEAT;
+        int ticks = (int) Math.round(stepMs / ShowClock.ESP_TICK_MS);
+        ticks = Math.max(TEMPO_MIN, Math.min(TEMPO_MAX, ticks));
+        if (Math.abs(ticks - tempo) <= tempo * TEMPO_CHANGE_MIN) return;
+
+        tempo = ticks;
+        tempoSlider.setProgress(progressFromTempo(tempo));
+        showController.setTempo(tempo);
+    }
+
     // Light one lamp on the selected light by hand, or on every light if none is selected
     private void setColor(byte color) {
         if (setupService.isAssigning()) return;
@@ -376,12 +460,17 @@ public class MainActivity extends AppCompatActivity implements TrafficLightListe
             throw new RuntimeException(e);
         }
         showController.start();
+        if (detectBpm.isChecked()) startBpmDetection();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         lightStore.touch();
+        if (bpmDetector != null) {  // the microphone is only used while the app is on screen
+            bpmDetector.stop();
+            bpmDetector = null;
+        }
         if (serverService != null) {
             serverService.stop();
         }

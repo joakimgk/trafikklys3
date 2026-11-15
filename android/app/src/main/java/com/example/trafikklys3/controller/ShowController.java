@@ -56,6 +56,9 @@ public class ShowController implements ClientListener {
 
     private boolean running = false;
 
+    // the tempo the current show runs at: the slider's, unless the show needs a finer step
+    private int showTempo = 60;
+
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     public ShowController(NetworkSender network,
@@ -102,9 +105,19 @@ public class ShowController implements ClientListener {
         return tempo;
     }
 
+    /** The user changed the tempo. */
     public void setTempo(int tempo) {
-        Log.d("ShowController", "setTempo: " + tempo);
         this.tempo = tempo;
+        if (running && isTimeBasedShow()) {
+            startShow();  // the program itself depends on the tempo: build it again
+            return;
+        }
+        applyTempo(tempo);
+    }
+
+    // What the units and the on-screen clock actually run at
+    private void applyTempo(int tempo) {
+        Log.d("ShowController", "applyTempo: " + tempo);
         clock.setTempo(tempo);
         simulator.reschedule();
         byte[] payload = new byte[] { (byte) (tempo >> 8), (byte) tempo };
@@ -165,8 +178,8 @@ public class ShowController implements ClientListener {
             program = buildShow(clients);
         }
 
-        // make sure the units run at the tempo the app shows
-        setTempo(tempo);
+        // make sure the units run at the tempo the show needs
+        applyTempo(showTempo);
         transmitProgram(program);
 
         network.sendToAll(EspProtocol.buildCommand(CMD_SWAP));
@@ -245,6 +258,7 @@ public class ShowController implements ClientListener {
     // Each builder sorts the list it is given, so hand it a copy
     private ArrayList<Program> buildShow(ArrayList<Client> clients) {
         ArrayList<Client> copy = new ArrayList<>(clients);
+        showTempo = tempo;
         switch (showIndex) {
             case 1:
                 return Animate.Wave(copy);
@@ -255,14 +269,25 @@ public class ShowController implements ClientListener {
             case 4:
                 return Animate.Intersection(copy);
             case 5:
-                return Animate.Blink(copy, Programs.RED);
+                return blink(copy, Programs.RED);
             case 6:
-                return Animate.Blink(copy, Programs.YLW);
+                return blink(copy, Programs.YLW);
             case 7:
-                return Animate.Blink(copy, Programs.GRN);
+                return blink(copy, Programs.GRN);
             default:
                 return Animate.Trail(copy);
         }
+    }
+
+    private ArrayList<Program> blink(ArrayList<Client> clients, byte color) {
+        Animate.BlinkPlan plan = Animate.planBlink(tempo);
+        showTempo = plan.tempoTicks;
+        return Animate.Blink(clients, color, plan);
+    }
+
+    // Shows whose program is made for one particular tempo
+    private boolean isTimeBasedShow() {
+        return showIndex >= 5;
     }
 
     private boolean tooLong(ArrayList<Program> program) {
